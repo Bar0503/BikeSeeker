@@ -1,5 +1,12 @@
 [
   {
+    "title": "Ifjúsági kerékpár",
+    "price": 50000,
+    "location": "Budapest, Magyarország",
+    "url": "https://bringakereso.hu/hirdetes/ifjusagi-kerekpar/",
+    "source": "bringakereso"
+  },
+  {
     "title": "Eladó jó állapotban MTb,gyári papírokkal",
     "price": 360000,
     "location": "Szombathely, Magyarország",
@@ -50,7 +57,7 @@
   },
   {
     "title": "26″ MTB Genesis Sigma",
-    "price": 502638,
+    "price": 115000,
     "location": "Bonyhád, Magyarország",
     "url": "https://bringakereso.hu/hirdetes/26-mtb-genesis-sigma/",
     "source": "bringakereso"
@@ -74,13 +81,6 @@
     "price": 90000,
     "location": "Budapest, Magyarország",
     "url": "https://bringakereso.hu/hirdetes/gt-avalanche-26%e2%80%b3-mtb-elol-teleszkopos/",
-    "source": "bringakereso"
-  },
-  {
-    "title": "Cone MTB 29 eladó",
-    "price": 200000,
-    "location": "Badacsonytördemic, 8263 Magyarország",
-    "url": "https://bringakereso.hu/hirdetes/mtb-elado-2/",
     "source": "bringakereso"
   }
 ]

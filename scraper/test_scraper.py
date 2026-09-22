@@ -21,9 +21,17 @@ OUTPUT_FILE = BASE_DIR / "bikes_data.json"
 
 
 def clean_price(raw_price: str | None) -> int | None:
-    #csak szamjegyek megtartasa
+    #ar tisztitasa: ezres elvalasztok (vesszo, pont, szokoz) kezelese
     if not raw_price:
         return None
+
+    #megkeressuk a Ft vagy HUF elotti szamokat vesszovel, ponttal vagy szokozzel
+    match = re.search(r"(\d[\d\s\.,]*)\s*(?:Ft|HUF)\b", raw_price, re.IGNORECASE)
+    if match:
+        digits_only = re.sub(r"\D", "", match.group(1))
+        return int(digits_only) if digits_only else None
+
+    #fallback: ha nincs Ft jeloles, de csak szamjegyek szerepelnek
     digits_only = re.sub(r"\D", "", raw_price)
     return int(digits_only) if digits_only else None
 
@@ -73,9 +81,16 @@ def parse_bike_card(card) -> dict | None:
     )
     location = loc_el.get_text(strip=True) if hasattr(loc_el, "get_text") else (str(loc_el).strip() if loc_el else None)
 
-    #ar kereses
-    price_match = card.find(string=re.compile(r"Ft", re.IGNORECASE))
-    price = clean_price(price_match) if price_match else None
+    #ar kereses: eloszor dedikalt ar osztalybol
+    price_tag = card.select_one("[class*='price'], [class*='amount']")
+    
+    if price_tag:
+        raw_price = price_tag.get_text(strip=True)
+        price = clean_price(raw_price)
+    else:
+        #fallback: szigoru regex szamjegyekkel es szohatarral (kizarja a shift szot)
+        price_match = card.find(string=re.compile(r"\d[\d\s\.]*\s*(?:Ft|HUF)\b", re.IGNORECASE))
+        price = clean_price(price_match) if price_match else None
 
     #objektum eltarolas
     return {
