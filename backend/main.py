@@ -2,7 +2,7 @@ from enum import Enum
 import json
 import math
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ app = FastAPI(
     version="0.1.0"
 )
 
-#cors beallitas a kesobbi frontend elereshez
+# CORS beallitas a frontend elereshez
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,17 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#adatfajl eleresi utja
-DATA_FILE = Path(__file__).resolve().parent.parent / "scraper" / "bikes_data.json"
+# Eleresi utak: elsdleges eles adat es a tartalek mintaadat
+SCRAPER_DIR = Path(__file__).resolve().parent.parent / "scraper"
+DATA_FILE = SCRAPER_DIR / "bikes_data.json"
+SAMPLE_DATA_FILE = SCRAPER_DIR / "bikes_data.sample.json"
 
 
-#rendezesi opciok
+# Rendezesi opciok
 class SortOption(str, Enum):
     PRICE_ASC = "price_asc"
     PRICE_DESC = "price_desc"
 
 
-#pydantic modellek
+# Pydantic modellek
 class Bike(BaseModel):
     title: str
     price: int | None = None
@@ -49,16 +51,33 @@ class BikeListResponse(BaseModel):
 
 
 def load_bikes() -> list[dict]:
-    #json fajl beolvasasa
-    if not DATA_FILE.exists():
+    """
+    Beolvassa a kerekpar adatokat.
+    Ha a friss 'bikes_data.json' nem letezik, automatikusan
+    a bemutatohoz/vedeshez keszitett 'bikes_data.sample.json'-re valt.
+    """
+    target_file = None
+
+    if DATA_FILE.exists():
+        target_file = DATA_FILE
+        print(f"[BikeSeeker] Scraper adatok betoltve: {DATA_FILE.name}")
+    elif SAMPLE_DATA_FILE.exists():
+        target_file = SAMPLE_DATA_FILE
+        print(f"[BikeSeeker - FIGYELEM] Friss adat nem talalhato, sample betoltve: {SAMPLE_DATA_FILE.name}")
+    else:
+        print("[BikeSeeker - HIBA] Sem az eles, sem a minta adatfajl nem talalhato!")
         return []
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+
+    try:
+        with open(target_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[BikeSeeker - HIBA] Hiba a JSON beolvasasakor ({target_file.name}): {e}")
+        return []
 
 
 @app.get("/")
 def root():
-    #alap statusz vegpont
     return {"message": "BikeSeeker API is running"}
 
 
@@ -70,47 +89,43 @@ def get_bikes(
     location: str | None = Query(default=None, description="Helyszin szurese"),
     sort_by: SortOption | None = Query(default=None, description="Rendezesi mod"),
     page: int = Query(default=1, ge=1, description="Oldalszam (1-tol indul)"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Talalatok szama oldalankent")
+    page_size: int = Query(default=12, ge=1, le=100, description="Talalatok szama oldalankent")
 ):
-    #kerekparok lekerese szurokkel, rendezessel es oldalszamozassal
     bikes = load_bikes()
-    if not bikes:
-        raise HTTPException(status_code=404, detail="No scraped data found")
-
     results = bikes
 
-    #szures tobb kulcsszora a cimben
+    # Szures tobb kulcsszora a cimben
     if query:
         words = query.lower().split()
         results = [
             b for b in results
-            if all(word in b["title"].lower() for word in words)
+            if all(word in b.get("title", "").lower() for word in words)
         ]
 
-    #szures minimalis ar alapjan
+    # Szures minimalis ar alapjan
     if min_price is not None:
-        results = [b for b in results if b["price"] is not None and b["price"] >= min_price]
+        results = [b for b in results if b.get("price") is not None and b["price"] >= min_price]
 
-    #szures maximalis ar alapjan
+    # Szures maximalis ar alapjan
     if max_price is not None:
-        results = [b for b in results if b["price"] is not None and b["price"] <= max_price]
+        results = [b for b in results if b.get("price") is not None and b["price"] <= max_price]
 
-    #szures helyszinre
+    # Szures helyszinre
     if location:
         loc_lower = location.lower()
-        results = [b for b in results if b["location"] and loc_lower in b["location"].lower()]
+        results = [b for b in results if b.get("location") and loc_lower in b["location"].lower()]
 
-    #rendezes ar alapjan (a None arak mindig a lista vegere kerulnek)
+    # Rendezes ar alapjan (a None arak mindig a lista vegere kerulnek)
     if sort_by == SortOption.PRICE_ASC:
-        results.sort(key=lambda b: (b["price"] is None, b["price"] or 0))
+        results.sort(key=lambda b: (b.get("price") is None, b.get("price") or 0))
     elif sort_by == SortOption.PRICE_DESC:
-        results.sort(key=lambda b: (b["price"] is None, -(b["price"] or 0)))
+        results.sort(key=lambda b: (b.get("price") is None, -(b.get("price") or 0)))
 
-    #osszesitett statisztikak es lapszam szamitas
+    # Osszesitett statisztikak es lapszam szamitas
     total_count = len(results)
-    total_pages = math.ceil(total_count / page_size) if total_count > 0 else 0
+    total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
 
-    #oldalhatarok kiszamolasa es vagas
+    # Oldalhatarok kiszamolasa es vagas
     start_index = (page - 1) * page_size
     end_index = start_index + page_size
     paginated_items = results[start_index:end_index]
