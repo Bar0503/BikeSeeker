@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import type { Bike, BikeListResponse, BikeQueryParams } from "./types/bike";
-import { fetchBikes } from "./services/bikeService";
+import { useCallback, useEffect, useState } from "react";
+import type { Bike, BikeListResponse, BikeQueryParams, ScrapeMode } from "./types/bike";
+import { fetchBikes, triggerScrape } from "./services/bikeService";
 import { BikeCard } from "./components/BikeCard";
 import { FilterBar } from "./components/FilterBar";
 import { Pagination } from "./components/Pagination";
@@ -19,10 +19,12 @@ function App() {
   const [filters, setFilters] = useState<BikeQueryParams>(DEFAULT_FILTERS);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [scrapingMode, setScrapingMode] = useState<ScrapeMode | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadBikes = useCallback((currentFilters: BikeQueryParams) => {
     setLoading(true);
-    fetchBikes(filters)
+    fetchBikes(currentFilters)
       .then((res) => {
         setData(res);
         setError(null);
@@ -33,7 +35,11 @@ function App() {
       .finally(() => {
         setLoading(false);
       });
-  }, [filters]);
+  }, []);
+
+  useEffect(() => {
+    loadBikes(filters);
+  }, [filters, loadBikes]);
 
   const handleFilterChange = (updated: Partial<BikeQueryParams>) => {
     setFilters((prev) => ({ ...prev, ...updated }));
@@ -42,6 +48,32 @@ function App() {
   const handleResetFilters = () => {
     setFilters(DEFAULT_FILTERS);
   };
+
+  // scraper inditasa es a lista automatikus ujratoltese
+  const handleScrape = async (mode: ScrapeMode) => {
+    if (scrapingMode !== null) {
+      return;
+    }
+
+    setScrapingMode(mode);
+    setSyncMessage(null);
+    setError(null);
+
+    try {
+      const result = await triggerScrape(mode);
+      setSyncMessage(
+        `Szinkronizáció kész (${result.pages_scraped} oldal): +${result.new_added} új, ${result.updated} frissített (Összesen: ${result.total_bikes} db)`
+      );
+      loadBikes(filters);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Hiba történt a szinkronizáció során.";
+      setError(message);
+    } finally {
+      setScrapingMode(null);
+    }
+  };
+
+  const isScraping = scrapingMode !== null;
 
   return (
     <div className="min-h-screen bg-[#0a120d] text-stone-100 p-6 md:p-10">
@@ -61,14 +93,48 @@ function App() {
               Használt kerékpár aggregáló és keresőmotor
             </p>
           </div>
-          {data && (
-            <div className="text-xs text-stone-400 bg-[#121f17] border border-emerald-900/30 px-3 py-1.5 rounded-lg self-start md:self-auto">
-              Találatok: <span className="text-emerald-400 font-semibold">{data.total}</span> db
-            </div>
-          )}
+
+          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+            <button
+              type="button"
+              onClick={() => handleScrape("latest")}
+              disabled={isScraping}
+              className="text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-stone-950 px-3.5 py-2 rounded-lg transition-colors"
+            >
+              {scrapingMode === "latest" ? "Frissítés..." : "Legfrissebbek"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleScrape("all")}
+              disabled={isScraping}
+              className="text-xs font-medium bg-[#121f17] hover:bg-emerald-950/70 disabled:opacity-50 disabled:cursor-not-allowed text-emerald-300 border border-emerald-800/60 px-3.5 py-2 rounded-lg transition-colors"
+            >
+              {scrapingMode === "all" ? "Teljes lekérés..." : "Összes MTB lekérése"}
+            </button>
+
+            {data && (
+              <div className="text-xs text-stone-400 bg-[#121f17] border border-emerald-900/30 px-3 py-2 rounded-lg">
+                Találatok: <span className="text-emerald-400 font-semibold">{data.total}</span> db
+              </div>
+            )}
+          </div>
         </header>
 
-        {/* Szűrő és keresőpanel */}
+        {syncMessage && (
+          <div className="mb-6 bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 px-4 py-3 rounded-xl text-xs flex items-center justify-between">
+            <span>{syncMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSyncMessage(null)}
+              className="text-emerald-400 hover:text-emerald-200 font-semibold ml-4"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* szuro es keresopanel */}
         <FilterBar
           filters={filters}
           onFilterChange={handleFilterChange}
@@ -103,7 +169,7 @@ function App() {
               ))}
             </div>
 
-            {/* Lapozó */}
+            {/* lapozo */}
             <Pagination
               currentPage={data.page}
               totalPages={data.total_pages}

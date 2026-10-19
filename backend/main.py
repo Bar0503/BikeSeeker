@@ -2,17 +2,24 @@ from enum import Enum
 import json
 import math
 from pathlib import Path
-from fastapi import FastAPI, Query
+import sys
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# projekt gyokonyvtar hozzaadasa az eleresi uthoz a scraper importalasahoz
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from scraper.scraper import sync_bikes
 
 app = FastAPI(
     title="BikeSeeker API",
     description="API server for scraped bicycle listings",
-    version="0.1.0"
+    version="0.1.0",
 )
 
-# CORS beallitas a frontend elereshez
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,19 +28,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Eleresi utak: elsdleges eles adat es a tartalek mintaadat
-SCRAPER_DIR = Path(__file__).resolve().parent.parent / "scraper"
+SCRAPER_DIR = BASE_DIR / "scraper"
 DATA_FILE = SCRAPER_DIR / "bikes_data.json"
 SAMPLE_DATA_FILE = SCRAPER_DIR / "bikes_data.sample.json"
 
 
-# Rendezesi opciok
 class SortOption(str, Enum):
     PRICE_ASC = "price_asc"
     PRICE_DESC = "price_desc"
 
 
-# Pydantic modellek
+class ScrapeMode(str, Enum):
+    LATEST = "latest"
+    ALL = "all"
+
+
 class Bike(BaseModel):
     title: str
     price: int | None = None
@@ -50,12 +59,16 @@ class BikeListResponse(BaseModel):
     items: list[Bike]
 
 
+class ScrapeResponse(BaseModel):
+    mode: str
+    pages_scraped: int
+    new_added: int
+    updated: int
+    total_bikes: int
+
+
+# kerekpar adatok betoltese automatikus sample fallbackkel
 def load_bikes() -> list[dict]:
-    """
-    Beolvassa a kerekpar adatokat.
-    Ha a friss 'bikes_data.json' nem letezik, automatikusan
-    a bemutatohoz/vedeshez keszitett 'bikes_data.sample.json'-re valt.
-    """
     target_file = None
 
     if DATA_FILE.exists():
@@ -63,21 +76,22 @@ def load_bikes() -> list[dict]:
         print(f"[BikeSeeker] Scraper adatok betoltve: {DATA_FILE.name}")
     elif SAMPLE_DATA_FILE.exists():
         target_file = SAMPLE_DATA_FILE
-        print(f"[BikeSeeker - FIGYELEM] Friss adat nem talalhato, sample betoltve: {SAMPLE_DATA_FILE.name}")
+        print(f"[FIGYELEM] Friss adat nem talalhato, sample betoltve: {SAMPLE_DATA_FILE.name}")
     else:
-        print("[BikeSeeker - HIBA] Sem az eles, sem a minta adatfajl nem talalhato!")
+        print("[HIBA] Sem az eles, sem a minta adatfajl nem talalhato!")
         return []
 
     try:
         with open(target_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[BikeSeeker - HIBA] Hiba a JSON beolvasasakor ({target_file.name}): {e}")
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, OSError) as err:
+        print(f"[HIBA] Hiba a JSON beolvasasakor ({target_file.name}): {err}")
         return []
 
 
 @app.get("/")
-def root():
+def root() -> dict[str, str]:
     return {"message": "BikeSeeker API is running"}
 
 
@@ -89,12 +103,11 @@ def get_bikes(
     location: str | None = Query(default=None, description="Helyszin szurese"),
     sort_by: SortOption | None = Query(default=None, description="Rendezesi mod"),
     page: int = Query(default=1, ge=1, description="Oldalszam (1-tol indul)"),
-    page_size: int = Query(default=12, ge=1, le=100, description="Talalatok szama oldalankent")
-):
-    bikes = load_bikes()
-    results = bikes
+    page_size: int = Query(default=12, ge=1, le=100, description="Talalatok szama oldalankent"),
+) -> dict:
+    results = load_bikes()
 
-    # Szures tobb kulcsszora a cimben
+    # szures tobb kulcsszora a cimben
     if query:
         words = query.lower().split()
         results = [
@@ -102,30 +115,27 @@ def get_bikes(
             if all(word in b.get("title", "").lower() for word in words)
         ]
 
-    # Szures minimalis ar alapjan
+    # szures minimalis es maximalis ar alapjan
     if min_price is not None:
         results = [b for b in results if b.get("price") is not None and b["price"] >= min_price]
 
-    # Szures maximalis ar alapjan
     if max_price is not None:
         results = [b for b in results if b.get("price") is not None and b["price"] <= max_price]
 
-    # Szures helyszinre
+    # szures helyszinre
     if location:
         loc_lower = location.lower()
         results = [b for b in results if b.get("location") and loc_lower in b["location"].lower()]
 
-    # Rendezes ar alapjan (a None arak mindig a lista vegere kerulnek)
+    # rendezes ar alapjan (a None arak mindig a lista vegere kerulnek)
     if sort_by == SortOption.PRICE_ASC:
         results.sort(key=lambda b: (b.get("price") is None, b.get("price") or 0))
     elif sort_by == SortOption.PRICE_DESC:
         results.sort(key=lambda b: (b.get("price") is None, -(b.get("price") or 0)))
 
-    # Osszesitett statisztikak es lapszam szamitas
     total_count = len(results)
     total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
 
-    # Oldalhatarok kiszamolasa es vagas
     start_index = (page - 1) * page_size
     end_index = start_index + page_size
     paginated_items = results[start_index:end_index]
@@ -135,5 +145,15 @@ def get_bikes(
         "page": page,
         "page_size": page_size,
         "total_pages": total_pages,
-        "items": paginated_items
+        "items": paginated_items,
     }
+
+
+@app.post("/api/bikes/scrape", response_model=ScrapeResponse)
+def trigger_scrape(
+    mode: ScrapeMode = Query(default=ScrapeMode.LATEST, description="Szinkronizacios mod: latest vagy all"),
+) -> dict[str, str | int]:
+    try:
+        return sync_bikes(mode=mode.value)
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Hiba a scrapeles soran: {err}") from err
