@@ -1,16 +1,39 @@
 import type { BikeQueryParams, SortOption } from "../types/bike";
 
+// Szurosav komponens bemeneti tulajdonsagai
 interface FilterBarProps {
   filters: BikeQueryParams;
   onFilterChange: (updated: Partial<BikeQueryParams>) => void;
   onReset: () => void;
 }
 
+// Ar bemenet validalasa: ures, ervenytelen vagy negativ ertekek kiszurese
+function parsePriceInput(rawValue: string): number | undefined {
+  if (!rawValue.trim()) {
+    return undefined;
+  }
+  const parsed = Number(rawValue);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return Math.floor(parsed);
+}
+
+// Keresesi es szuresi vezerlopanel komponens
 export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) {
+  // Ellenorizzuk, hogy van-e barmilyen aktiv szurofeltetel beallitva (a 0 Ft is ervenyes szuro)
+  const hasActiveFilters = Boolean(
+    filters.query ||
+      filters.min_price !== undefined ||
+      filters.max_price !== undefined ||
+      filters.location ||
+      filters.sort_by
+  );
+
   return (
     <div className="bg-[#121f17]/90 border border-emerald-900/30 rounded-2xl p-5 mb-8 shadow-xl backdrop-blur-sm">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        {/* Szöveges keresés */}
+        {/* Szoveges kereses mezo */}
         <div className="lg:col-span-2">
           <label className="block text-[11px] font-medium text-emerald-200/70 mb-1">
             Keresés típusra, márkára
@@ -18,24 +41,25 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
           <input
             type="text"
             placeholder="pl. Genesis, Trek, gravel..."
-            value={filters.query || ""}
+            value={filters.query ?? ""}
             onChange={(e) => onFilterChange({ query: e.target.value, page: 1 })}
             className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500 transition-colors"
           />
         </div>
 
-        {/* Minimális ár */}
+        {/* Minimalis ar szuro mezo */}
         <div>
           <label className="block text-[11px] font-medium text-emerald-200/70 mb-1">
             Min. ár (Ft)
           </label>
           <input
             type="number"
+            min={0}
             placeholder="0"
             value={filters.min_price ?? ""}
             onChange={(e) =>
               onFilterChange({
-                min_price: e.target.value ? Number(e.target.value) : undefined,
+                min_price: parsePriceInput(e.target.value),
                 page: 1,
               })
             }
@@ -43,18 +67,19 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
           />
         </div>
 
-        {/* Maximális ár */}
+        {/* Maximalis ar szuro mezo */}
         <div>
           <label className="block text-[11px] font-medium text-emerald-200/70 mb-1">
             Max. ár (Ft)
           </label>
           <input
             type="number"
+            min={0}
             placeholder="pl. 150000"
             value={filters.max_price ?? ""}
             onChange={(e) =>
               onFilterChange({
-                max_price: e.target.value ? Number(e.target.value) : undefined,
+                max_price: parsePriceInput(e.target.value),
                 page: 1,
               })
             }
@@ -62,13 +87,13 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
           />
         </div>
 
-        {/* Rendezés */}
+        {/* Rendezes kivalaszto legordulo menu */}
         <div>
           <label className="block text-[11px] font-medium text-emerald-200/70 mb-1">
             Rendezés
           </label>
           <select
-            value={filters.sort_by || ""}
+            value={filters.sort_by ?? ""}
             onChange={(e) =>
               onFilterChange({
                 sort_by: (e.target.value as SortOption) || undefined,
@@ -84,10 +109,11 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
         </div>
       </div>
 
-      {/* Szűrők törlése gomb */}
-      {(filters.query || filters.min_price || filters.max_price || filters.sort_by) && (
+      {/* Szurok alaphelyzetbe allitasa gomb, ha van aktiv szuro */}
+      {hasActiveFilters && (
         <div className="mt-4 pt-3 border-t border-emerald-900/30 flex justify-end">
           <button
+            type="button"
             onClick={onReset}
             className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
           >

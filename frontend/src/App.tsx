@@ -5,13 +5,17 @@ import { BikeCard } from "./components/BikeCard";
 import { FilterBar } from "./components/FilterBar";
 import { Pagination } from "./components/Pagination";
 
-const DEFAULT_FILTERS: BikeQueryParams = {
+// Egy oldalon megjelenitett kerekparok alapertelmezett szama
+const DEFAULT_PAGE_SIZE = 12;
+
+// Kezdeti szuresi es lapozasi beallitasok
+const DEFAULT_FILTERS: Readonly<BikeQueryParams> = {
   query: "",
   min_price: undefined,
   max_price: undefined,
   sort_by: undefined,
   page: 1,
-  page_size: 12,
+  page_size: DEFAULT_PAGE_SIZE,
 };
 
 function App() {
@@ -22,7 +26,8 @@ function App() {
   const [scrapingMode, setScrapingMode] = useState<ScrapeMode | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
-  const loadBikes = useCallback((currentFilters: BikeQueryParams) => {
+  // Kerekpar lista lekerese az aktualis szurofeltetelekkel
+  const loadBikes = useCallback((currentFilters: BikeQueryParams): void => {
     setLoading(true);
     fetchBikes(currentFilters)
       .then((res) => {
@@ -37,20 +42,23 @@ function App() {
       });
   }, []);
 
+  // Szurok valtozasakor automatikusan ujratoltjuk a talalatokat
   useEffect(() => {
     loadBikes(filters);
   }, [filters, loadBikes]);
 
-  const handleFilterChange = (updated: Partial<BikeQueryParams>) => {
+  // Szurofeltetelek reszleges frissitese
+  const handleFilterChange = (updated: Partial<BikeQueryParams>): void => {
     setFilters((prev) => ({ ...prev, ...updated }));
   };
 
-  const handleResetFilters = () => {
+  // Osszes szuro visszaallitasa az alapertelmezett ertekre
+  const handleResetFilters = (): void => {
     setFilters(DEFAULT_FILTERS);
   };
 
-  // scraper inditasa es a lista automatikus ujratoltese
-  const handleScrape = async (mode: ScrapeMode) => {
+  // Scraper inditasa a valasztott modban es a lista automatikus ujratoltese
+  const handleScrape = async (mode: ScrapeMode): Promise<void> => {
     if (scrapingMode !== null) {
       return;
     }
@@ -65,8 +73,9 @@ function App() {
         `Szinkronizáció kész (${result.pages_scraped} oldal): +${result.new_added} új, ${result.updated} frissített (Összesen: ${result.total_bikes} db)`
       );
       loadBikes(filters);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Hiba történt a szinkronizáció során.";
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Hiba történt a szinkronizáció során.";
       setError(message);
     } finally {
       setScrapingMode(null);
@@ -78,6 +87,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[#0a120d] text-stone-100 p-6 md:p-10">
       <div className="max-w-7xl mx-auto">
+        {/* Oldal fejlec a cimmel, szinkronizalo gombokkal es a talalatszammal */}
         <header className="mb-8 border-b border-emerald-950/80 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -121,6 +131,7 @@ function App() {
           </div>
         </header>
 
+        {/* Sikeres szinkronizaciot jelzo ertesitesi sav */}
         {syncMessage && (
           <div className="mb-6 bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 px-4 py-3 rounded-xl text-xs flex items-center justify-between">
             <span>{syncMessage}</span>
@@ -134,19 +145,21 @@ function App() {
           </div>
         )}
 
-        {/* szuro es keresopanel */}
+        {/* Szuro es keresopanel */}
         <FilterBar
           filters={filters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
         />
 
+        {/* Betoltesi allapot visszajelzese */}
         {loading && (
           <div className="text-center py-20 text-emerald-300/70 text-sm animate-pulse">
             Adatok frissítése...
           </div>
         )}
 
+        {/* Hibauzenet megjelenitese sikertelen keres eseten */}
         {error && (
           <div className="bg-rose-950/40 border border-rose-900/50 text-rose-300 p-5 rounded-xl text-center max-w-lg mx-auto my-10">
             <p className="font-semibold mb-1">Hiba történt</p>
@@ -154,6 +167,7 @@ function App() {
           </div>
         )}
 
+        {/* Ures talalati lista visszajelzese */}
         {!loading && !error && data && data.items.length === 0 && (
           <div className="text-center py-20 bg-[#121f17]/40 border border-emerald-900/30 rounded-2xl">
             <p className="text-stone-300 font-medium">Nincs a szűrésnek megfelelő találat.</p>
@@ -161,6 +175,7 @@ function App() {
           </div>
         )}
 
+        {/* Kerekpar kartyak racsa es az oldallapozo */}
         {!loading && !error && data && data.items.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -169,7 +184,6 @@ function App() {
               ))}
             </div>
 
-            {/* lapozo */}
             <Pagination
               currentPage={data.page}
               totalPages={data.total_pages}

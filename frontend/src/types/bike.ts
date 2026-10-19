@@ -1,4 +1,4 @@
-// egyetlen kerekpar hirdetes adatmodellje
+// Egyetlen kerekpar hirdetes adatmodellje
 export interface Bike {
   title: string;
   price: number | null;
@@ -7,9 +7,10 @@ export interface Bike {
   source: string;
 }
 
+// Ar szerinti rendezesi iranyok tipusa
 export type SortOption = "price_asc" | "price_desc";
 
-// lapozott backend valasz szerkezete
+// Lapozott backend valasz szerkezete a kerekpar listahoz
 export interface BikeListResponse {
   total: number;
   page: number;
@@ -18,7 +19,7 @@ export interface BikeListResponse {
   items: Bike[];
 }
 
-// kereseshez es szureshez hasznalt lekerdezesi parameterek
+// Kereseshez, szureshez es lapozashoz hasznalt lekerdezesi parameterek
 export interface BikeQueryParams {
   query?: string;
   min_price?: number;
@@ -29,9 +30,10 @@ export interface BikeQueryParams {
   page_size?: number;
 }
 
+// Scraper futtatasi modok: csak a legfrissebb oldal vagy a teljes hirdeteslista
 export type ScrapeMode = "latest" | "all";
 
-// scraper szinkronizacio eredmenye
+// Scraper szinkronizacio utani backend valasz szerkezete
 export interface ScrapeResponse {
   mode: ScrapeMode;
   pages_scraped: number;

@@ -1,18 +1,32 @@
 import type { Bike } from "../types/bike";
 
+// Kerekpar kartya komponens bemeneti tulajdonsagai
 interface BikeCardProps {
   bike: Bike;
 }
 
+// Magyar teruleti beallitas az arak ezres tagolasahoz
+const PRICE_LOCALE = "hu-HU";
+
+// Kulso hirdetes URL sema ellenorzese XSS tamadasok ellen
+function isSafeHttpUrl(rawUrl: string): boolean {
+  return rawUrl.startsWith("https://") || rawUrl.startsWith("http://");
+}
+
+// Egyetlen kerekpar hirdetes kartya megjelenitese
 export function BikeCard({ bike }: BikeCardProps) {
+  // Ar formazasa forintban vagy alapertelmezett szoveg megjelenitese, ha nincs megadva ar
   const formattedPrice =
     bike.price !== null
-      ? `${bike.price.toLocaleString("hu-HU")} Ft`
+      ? `${bike.price.toLocaleString(PRICE_LOCALE)} Ft`
       : "Ár megegyezés szerint";
+
+  const safeHref = isSafeHttpUrl(bike.url) ? bike.url : "#";
 
   return (
     <div className="bg-[#121f17] border border-emerald-900/30 rounded-xl p-5 hover:border-emerald-500/50 transition-all flex flex-col justify-between shadow-md hover:shadow-emerald-950/40">
       <div>
+        {/* Helyszin es pozicio ikon megjelenitese, ha a hirdetes tartalmaz telepulesnevet */}
         {bike.location && (
           <div className="flex items-center gap-1.5 text-xs text-emerald-400/80 mb-2.5">
             <svg
@@ -38,11 +52,13 @@ export function BikeCard({ bike }: BikeCardProps) {
           </div>
         )}
 
+        {/* Hirdetes cimenek megjelenitese maximum ket sorban */}
         <h3 className="font-semibold text-stone-100 text-sm md:text-base leading-snug line-clamp-2 mb-3">
           {bike.title}
         </h3>
       </div>
 
+      {/* Kartya also savja a formazott arral es az eredeti hirdetesre mutato gombbal */}
       <div className="pt-4 border-t border-emerald-900/30 flex items-center justify-between gap-3 mt-2">
         <span
           className={`text-sm md:text-base font-bold ${
@@ -53,7 +69,7 @@ export function BikeCard({ bike }: BikeCardProps) {
         </span>
 
         <a
-          href={bike.url}
+          href={safeHref}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs bg-emerald-800/60 hover:bg-emerald-600 text-emerald-100 hover:text-white font-medium px-3.5 py-1.5 rounded-lg border border-emerald-700/40 transition-colors"
