@@ -1,0 +1,5 @@
+# Shell scriptek mindig Linux/macOS LF sortorest hasznaljanak
+*.sh text eol=lf
+
+# Windows batch scriptek mindig CRLF-et hasznaljanak
+*.bat text eol=crlf
