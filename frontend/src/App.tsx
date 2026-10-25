@@ -13,6 +13,7 @@ const DEFAULT_FILTERS: Readonly<BikeQueryParams> = {
   query: "",
   min_price: undefined,
   max_price: undefined,
+  location: "",
   sort_by: undefined,
   page: 1,
   page_size: DEFAULT_PAGE_SIZE,
@@ -26,25 +27,41 @@ function App() {
   const [scrapingMode, setScrapingMode] = useState<ScrapeMode | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
-  // Kerekpar lista lekerese az aktualis szurofeltetelekkel
-  const loadBikes = useCallback((currentFilters: BikeQueryParams): void => {
-    setLoading(true);
-    fetchBikes(currentFilters)
-      .then((res) => {
-        setData(res);
-        setError(null);
-      })
-      .catch((err: Error) => {
-        setError(err.message);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
+  // Kerekpar lista lekerese az aktualis szurofeltetelekkel es megszakitasi lehetoseggel
+  const loadBikes = useCallback(
+    (currentFilters: BikeQueryParams, signal?: AbortSignal): void => {
+      setLoading(true);
+      fetchBikes(currentFilters, signal)
+        .then((res) => {
+          setData(res);
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          // Megszakitott keres eseten nem dobunk hibat es nem irjuk felul az allapotot
+          if (err instanceof DOMException && err.name === "AbortError") {
+            return;
+          }
+          const message =
+            err instanceof Error ? err.message : "Váratlan hiba történt az adatok betöltésekor.";
+          setError(message);
+        })
+        .finally(() => {
+          if (!signal?.aborted) {
+            setLoading(false);
+          }
+        });
+    },
+    []
+  );
 
-  // Szurok valtozasakor automatikusan ujratoltjuk a talalatokat
+  // Szurok valtozasakor automatikusan ujratoltjuk a talalatokat, es leallitjuk az elavult kerest
   useEffect(() => {
-    loadBikes(filters);
+    const controller = new AbortController();
+    loadBikes(filters, controller.signal);
+
+    return () => {
+      controller.abort();
+    };
   }, [filters, loadBikes]);
 
   // Szurofeltetelek reszleges frissitese

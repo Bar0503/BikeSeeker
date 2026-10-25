@@ -1,8 +1,8 @@
 // Lapozo komponens bemeneti tulajdonsagai
 interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (newPage: number) => void;
+  readonly currentPage: number;
+  readonly totalPages: number;
+  readonly onPageChange: (newPage: number) => void;
 }
 
 // Lapozo navigacio megjelenitese tobboldalas talalati lista eseten
@@ -12,12 +12,20 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
     return null;
   }
 
+  // Oldalvaltas ervenyesitese hatarertekek kozott
+  const handlePageStep = (targetPage: number): void => {
+    if (targetPage < 1 || targetPage > totalPages || targetPage === currentPage) {
+      return;
+    }
+    onPageChange(targetPage);
+  };
+
   return (
     <div className="flex items-center justify-center gap-3 mt-10">
       {/* Elozo oldalra lepes gombja */}
       <button
         type="button"
-        onClick={() => onPageChange(currentPage - 1)}
+        onClick={() => handlePageStep(currentPage - 1)}
         disabled={currentPage <= 1}
         className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#121f17] border border-emerald-900/40 text-stone-300 hover:bg-emerald-900/30 hover:text-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
@@ -32,7 +40,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
       {/* Kovetkezo oldalra lepes gombja */}
       <button
         type="button"
-        onClick={() => onPageChange(currentPage + 1)}
+        onClick={() => handlePageStep(currentPage + 1)}
         disabled={currentPage >= totalPages}
         className="px-4 py-2 text-xs font-semibold rounded-lg bg-[#121f17] border border-emerald-900/40 text-stone-300 hover:bg-emerald-900/30 hover:text-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >

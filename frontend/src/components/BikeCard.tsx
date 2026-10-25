@@ -2,11 +2,11 @@ import type { Bike } from "../types/bike";
 
 // Kerekpar kartya komponens bemeneti tulajdonsagai
 interface BikeCardProps {
-  bike: Bike;
+  readonly bike: Bike;
 }
 
-// Magyar teruleti beallitas az arak ezres tagolasahoz
-const PRICE_LOCALE = "hu-HU";
+// Modul-szintu magyar szamformazo peldany az arak hatekony ezres tagolasahoz
+const HUF_FORMATTER = new Intl.NumberFormat("hu-HU");
 
 // Kulso hirdetes URL sema ellenorzese XSS tamadasok ellen
 function isSafeHttpUrl(rawUrl: string): boolean {
@@ -18,10 +18,10 @@ export function BikeCard({ bike }: BikeCardProps) {
   // Ar formazasa forintban vagy alapertelmezett szoveg megjelenitese, ha nincs megadva ar
   const formattedPrice =
     bike.price !== null
-      ? `${bike.price.toLocaleString(PRICE_LOCALE)} Ft`
+      ? `${HUF_FORMATTER.format(bike.price)} Ft`
       : "Ár megegyezés szerint";
 
-  const safeHref = isSafeHttpUrl(bike.url) ? bike.url : "#";
+  const hasValidUrl = isSafeHttpUrl(bike.url);
 
   return (
     <div className="bg-[#121f17] border border-emerald-900/30 rounded-xl p-5 hover:border-emerald-500/50 transition-all flex flex-col justify-between shadow-md hover:shadow-emerald-950/40">
@@ -68,14 +68,16 @@ export function BikeCard({ bike }: BikeCardProps) {
           {formattedPrice}
         </span>
 
-        <a
-          href={safeHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs bg-emerald-800/60 hover:bg-emerald-600 text-emerald-100 hover:text-white font-medium px-3.5 py-1.5 rounded-lg border border-emerald-700/40 transition-colors"
-        >
-          Megnyitás
-        </a>
+        {hasValidUrl && (
+          <a
+            href={bike.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs bg-emerald-800/60 hover:bg-emerald-600 text-emerald-100 hover:text-white font-medium px-3.5 py-1.5 rounded-lg border border-emerald-700/40 transition-colors"
+          >
+            Megnyitás
+          </a>
+        )}
       </div>
     </div>
   );
