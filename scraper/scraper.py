@@ -3,24 +3,46 @@ from pathlib import Path
 import re
 import sys
 import time
+from typing import Final
 import requests
 from bs4 import BeautifulSoup, Tag
 from requests.exceptions import RequestException
 
-BASE_URL = "https://bringakereso.hu"
-PAGE_URL_TEMPLATE = (
+# Alap URL-ek es a listazo oldal sablonja
+BASE_URL: Final[str] = "https://bringakereso.hu"
+PAGE_URL_TEMPLATE: Final[str] = (
     "https://bringakereso.hu/hirdetesek/kerekpar,mtb/"
     "?oldal={page}&rendezes=newest&nezet=sor"
 )
-SOURCE_NAME = "bringakereso"
-CARD_SELECTOR = "a.listivo-listing-card-row-v2, a[class*='listing-card']"
+SOURCE_NAME: Final[str] = "bringakereso"
+LISTING_PATH_FRAGMENT: Final[str] = "/hirdetes/"
 
-REQUEST_TIMEOUT_SEC = 10
-DEFAULT_MAX_PAGES = 30
-DEFAULT_DELAY_SEC = 0.5
-ALLOWED_MODES = ("latest", "all")
+# DOM szelektorok a hirdetes kartyak es mezok kinyeresehez
+CARD_SELECTOR: Final[str] = "a.listivo-listing-card-row-v2, a[class*='listing-card']"
+TITLE_TAGS: Final[list[str]] = ["h2", "h3", "h4"]
+TITLE_SELECTOR: Final[str] = "[class*='title']"
+LOCATION_SELECTOR: Final[str] = "[class*='location']"
+CITY_SELECTOR: Final[str] = "[class*='city']"
+PRICE_SELECTOR: Final[str] = "[class*='price'], [class*='amount']"
 
-HEADERS = {
+# Halozati es lapozasi konstansok
+REQUEST_TIMEOUT_SEC: Final[int] = 10
+DEFAULT_MAX_PAGES: Final[int] = 30
+DEFAULT_DELAY_SEC: Final[float] = 0.5
+ALLOWED_MODES: Final[tuple[str, ...]] = ("latest", "all")
+
+# Elore leforditott reguláris kifejezesek a gyorsabb szovegfeldolgozashoz
+PRICE_WITH_CURRENCY_REGEX: Final[re.Pattern[str]] = re.compile(
+    r"(\d[\d\s\.,]*)\s*(?:Ft|HUF)\b", re.IGNORECASE
+)
+FALLBACK_PRICE_REGEX: Final[re.Pattern[str]] = re.compile(
+    r"\d[\d\s\.]*\s*(?:Ft|HUF)\b", re.IGNORECASE
+)
+NON_DIGIT_REGEX: Final[re.Pattern[str]] = re.compile(r"\D")
+COUNTRY_REGEX: Final[re.Pattern[str]] = re.compile(r"Magyarország", re.IGNORECASE)
+
+# Bongeszot imitálo HTTP fejlec
+HEADERS: Final[dict[str, str]] = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -28,61 +50,74 @@ HEADERS = {
     )
 }
 
-BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_FILE = BASE_DIR / "bikes_data.json"
+# Fajlrendszeri eleresi utak
+BASE_DIR: Final[Path] = Path(__file__).resolve().parent
+OUTPUT_FILE: Final[Path] = BASE_DIR / "bikes_data.json"
+
+BikeRecord = dict[str, str | int | None]
 
 
-# ar tisztitasa: ezres elvalasztok kezelese es szamjegyek kinyerese
+# Ar tisztitasa: ezres elvalasztok eltavolitasa es egesz szamma alakitas
 def clean_price(raw_price: str | None) -> int | None:
     if not raw_price:
         return None
 
-    match = re.search(r"(\d[\d\s\.,]*)\s*(?:Ft|HUF)\b", raw_price, re.IGNORECASE)
+    match = PRICE_WITH_CURRENCY_REGEX.search(raw_price)
     if match:
-        digits_only = re.sub(r"\D", "", match.group(1))
+        digits_only = NON_DIGIT_REGEX.sub("", match.group(1))
         return int(digits_only) if digits_only else None
 
-    digits_only = re.sub(r"\D", "", raw_price)
+    digits_only = NON_DIGIT_REGEX.sub("", raw_price)
     return int(digits_only) if digits_only else None
 
 
-# oldal letoltese hibakezelessel es timeouttal
+# Oldal HTML tartalmanak letoltese hibakezelessel es idokorlattal
 def fetch_html(url: str, session: requests.Session | None = None) -> str | None:
     client = session or requests
     try:
-        print(f"Lekeres folyamatban: {url} ...")
+        print(f"Lekérés folyamatban: {url} ...")
         response = client.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SEC)
         response.raise_for_status()
         return response.text
     except requests.exceptions.HTTPError as err:
-        print(f"HTTP hiba tortent: {err}")
+        print(f"HTTP hiba történt: {err}")
     except requests.exceptions.ConnectionError:
-        print("Halozati hiba: Nem sikerult csatlakozni.")
+        print("Hálózati hiba: Nem sikerült csatlakozni a szerverhez.")
     except requests.exceptions.Timeout:
-        print("Idotullepes: A szerver nem valaszolt.")
+        print("Időtúllépés: A szerver nem válaszolt időben.")
     except RequestException as err:
-        print(f"Varatlan hiba a keres soran: {err}")
+        print(f"Váratlan hiba a kérés során: {err}")
     return None
 
 
-# egyetlen hirdetes kartya adatainak kinyerese a DOM elembol
-def parse_bike_card(card: Tag) -> dict[str, str | int | None] | None:
+# Ar mezok kinyerese a kartya DOM elemebol
+def extract_card_price(card: Tag) -> int | None:
+    price_tag = card.select_one(PRICE_SELECTOR)
+    if price_tag:
+        return clean_price(price_tag.get_text(strip=True))
+
+    price_match = card.find(string=FALLBACK_PRICE_REGEX)
+    return clean_price(str(price_match)) if price_match else None
+
+
+# Egyetlen hirdetes kartya adatainak kinyerese es validalasa
+def parse_bike_card(card: Tag) -> BikeRecord | None:
     raw_href = card.get("href")
     href = raw_href if isinstance(raw_href, str) else ""
-    if not href or "/hirdetes/" not in href:
+    if not href or LISTING_PATH_FRAGMENT not in href:
         return None
 
     full_url = href if href.startswith("http") else f"{BASE_URL}{href}"
 
-    title_tag = card.find(["h2", "h3", "h4"]) or card.select_one("[class*='title']")
+    title_tag = card.find(TITLE_TAGS) or card.select_one(TITLE_SELECTOR)
     title = title_tag.get_text(strip=True) if title_tag else card.get_text(" ", strip=True)
     if not title:
         return None
 
     loc_el = (
-        card.select_one("[class*='location']")
-        or card.select_one("[class*='city']")
-        or card.find(string=re.compile(r"Magyarország", re.IGNORECASE))
+        card.select_one(LOCATION_SELECTOR)
+        or card.select_one(CITY_SELECTOR)
+        or card.find(string=COUNTRY_REGEX)
     )
     location = (
         loc_el.get_text(strip=True)
@@ -90,33 +125,27 @@ def parse_bike_card(card: Tag) -> dict[str, str | int | None] | None:
         else (str(loc_el).strip() if loc_el else None)
     )
 
-    price_tag = card.select_one("[class*='price'], [class*='amount']")
-    if price_tag:
-        price = clean_price(price_tag.get_text(strip=True))
-    else:
-        price_match = card.find(string=re.compile(r"\d[\d\s\.]*\s*(?:Ft|HUF)\b", re.IGNORECASE))
-        price = clean_price(str(price_match)) if price_match else None
-
     return {
         "title": title,
-        "price": price,
+        "price": extract_card_price(card),
         "location": location,
         "url": full_url,
         "source": SOURCE_NAME,
     }
 
 
-# oldalak vegiglapozasa a valasztott mod alapjan (latest = 1. oldal, all = osszes oldal)
+# Oldalak vegiglapozasa a valasztott mod alapjan (latest = 1. oldal, all = osszes oldal)
 def scrape_pages(
     mode: str = "latest",
     max_pages: int = DEFAULT_MAX_PAGES,
     delay_sec: float = DEFAULT_DELAY_SEC,
-) -> tuple[list[dict[str, str | int | None]], int]:
-    scraped_bikes: list[dict[str, str | int | None]] = []
+) -> tuple[list[BikeRecord], int]:
+    scraped_bikes: list[BikeRecord] = []
     seen_in_run: set[str] = set()
     pages_scraped = 0
     target_max_page = 1 if mode == "latest" else max_pages
 
+    # Session kontextuskezelo a TCP kapcsolatok szabalyos lezarasahoz
     with requests.Session() as session:
         for page in range(1, target_max_page + 1):
             if page > 1:
@@ -143,16 +172,17 @@ def scrape_pages(
                     new_on_page += 1
 
             pages_scraped += 1
-            print(f"[{page}. oldal] +{new_on_page} kerekpar ezen az oldalon (Eddig: {len(scraped_bikes)} db)")
+            print(f"[{page}. oldal] +{new_on_page} kerékpár ezen az oldalon (Eddig: {len(scraped_bikes)} db)")
 
             if new_on_page == 0:
-                print("Elertuk az utolso oldalt, nincs tobb uj hirdetes.")
+                print("Elértük az utolsó oldalt, nincs több új hirdetés.")
                 break
 
     return scraped_bikes, pages_scraped
 
 
-def load_existing_bikes(filepath: Path = OUTPUT_FILE) -> list[dict[str, str | int | None]]:
+# Meglevo hirdetesek biztonsagos betoltese a JSON fajlbol
+def load_existing_bikes(filepath: Path = OUTPUT_FILE) -> list[BikeRecord]:
     if not filepath.exists():
         return []
     try:
@@ -160,20 +190,23 @@ def load_existing_bikes(filepath: Path = OUTPUT_FILE) -> list[dict[str, str | in
             data = json.load(f)
             return data if isinstance(data, list) else []
     except (json.JSONDecodeError, OSError) as err:
-        print(f"Figyelem: A meglevo JSON nem olvashato ({err}), ures listaval indulunk.")
+        print(f"Figyelem: A meglévő JSON nem olvasható ({err}), üres listával indulunk.")
         return []
 
 
-def save_to_json(data: list[dict[str, str | int | None]], filepath: Path = OUTPUT_FILE) -> None:
-    with open(filepath, "w", encoding="utf-8") as f:
+# Hirdetesek atomi mentese JSON fajlba ideiglenes fajlon keresztul
+def save_to_json(data: list[BikeRecord], filepath: Path = OUTPUT_FILE) -> None:
+    temp_file = filepath.with_suffix(".tmp")
+    with open(temp_file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    temp_file.replace(filepath)
     print(f"Adatok elmentve ide: {filepath}")
 
 
-# lescrapelt hirdetesek osszefesulese a meglevo JSON allomannyal O(n) idoben
+# Lescrapelt hirdetesek osszefesulese a meglevo JSON allomannyal O(n) idoben
 def sync_bikes(mode: str = "latest") -> dict[str, str | int]:
     if mode not in ALLOWED_MODES:
-        raise ValueError(f"Ervenytelen mod: {mode}. Engedelyezett: {ALLOWED_MODES}")
+        raise ValueError(f"Érvénytelen szinkronizációs mód: {mode}. Engedélyezett: {ALLOWED_MODES}")
 
     existing_bikes = load_existing_bikes()
     existing_by_url = {
@@ -182,9 +215,10 @@ def sync_bikes(mode: str = "latest") -> dict[str, str | int]:
 
     scraped_bikes, pages_scraped = scrape_pages(mode=mode)
 
-    new_bikes: list[dict[str, str | int | None]] = []
+    new_bikes: list[BikeRecord] = []
     updated_count = 0
 
+    # Uj elemek kivalogatasa es a mar letezok frissitese ar- vagy cimvaltozas eseten
     for bike in scraped_bikes:
         url = str(bike["url"])
         if url not in existing_by_url:
@@ -204,7 +238,7 @@ def sync_bikes(mode: str = "latest") -> dict[str, str | int]:
     if new_bikes or updated_count > 0 or not OUTPUT_FILE.exists():
         save_to_json(merged_bikes)
     else:
-        print("Nem tortent valtozas, nem volt szukseg fajlirasra.")
+        print("Nem történt változás, nem volt szükség fájlírásra.")
 
     return {
         "mode": mode,
@@ -219,9 +253,9 @@ if __name__ == "__main__":
     run_mode = "all" if "--all" in sys.argv else "latest"
     result = sync_bikes(mode=run_mode)
     print(
-        f"\nSzinkronizacio kesz ({result['mode']})! "
-        f"Lekert oldalak: {result['pages_scraped']} | "
-        f"Uj: +{result['new_added']} db | "
-        f"Frissitve: {result['updated']} db | "
-        f"Osszesen: {result['total_bikes']} db."
+        f"\nSzinkronizáció kész ({result['mode']})! "
+        f"Lekért oldalak: {result['pages_scraped']} | "
+        f"Új: +{result['new_added']} db | "
+        f"Frissítve: {result['updated']} db | "
+        f"Összesen: {result['total_bikes']} db."
     )
