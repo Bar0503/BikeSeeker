@@ -1,5 +1,9 @@
 import type { BikeQueryParams, SortOption } from "../types/bike";
 
+// Engedelyezett oldalméretek es az alapertelmezett ertek
+const DEFAULT_PAGE_SIZE = 12;
+const PAGE_SIZE_OPTIONS: readonly number[] = [12, 20, 50, 100];
+
 // Szurosav komponens bemeneti tulajdonsagai
 interface FilterBarProps {
   readonly filters: BikeQueryParams;
@@ -21,13 +25,14 @@ function parsePriceInput(rawValue: string): number | undefined {
 
 // Keresesi es szuresi vezerlopanel komponens
 export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) {
-  // Ellenorizzuk, hogy van-e barmilyen aktiv szurofeltetel beallitva (a 0 Ft is ervenyes szuro)
+  // Ellenorizzuk, hogy van-e barmilyen aktiv szurofeltetel vagy egyedi oldalmeret beallitva
   const hasActiveFilters = Boolean(
     filters.query ||
       filters.min_price !== undefined ||
       filters.max_price !== undefined ||
       filters.location ||
-      filters.sort_by
+      filters.sort_by ||
+      (filters.page_size !== undefined && filters.page_size !== DEFAULT_PAGE_SIZE)
   );
 
   return (
@@ -139,6 +144,32 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
             <option value="">Alapértelmezett</option>
             <option value="price_asc">Ár: növekvő</option>
             <option value="price_desc">Ár: csökkenő</option>
+          </select>
+        </div>
+        {/* Megjelenitett elemek szama oldalankent */}
+        <div>
+          <label
+            htmlFor="filter-page-size"
+            className="block text-[11px] font-medium text-emerald-200/70 mb-1"
+          >
+            Találat / oldal
+          </label>
+          <select
+            id="filter-page-size"
+            value={filters.page_size ?? DEFAULT_PAGE_SIZE}
+            onChange={(e) =>
+              onFilterChange({
+                page_size: Number(e.target.value),
+                page: 1,
+              })
+            }
+            className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size} db
+              </option>
+            ))}
           </select>
         </div>
       </div>
