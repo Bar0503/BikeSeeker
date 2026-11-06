@@ -7,7 +7,6 @@ interface PaginationProps {
 
 // Lapozo navigacio megjelenitese tobboldalas talalati lista eseten
 export function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
-  // Ha csak egyetlen oldal van, nem jelenitjuk meg a lapozot
   if (totalPages <= 1) {
     return null;
   }

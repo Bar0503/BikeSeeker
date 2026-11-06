@@ -1,4 +1,15 @@
-import type { BikeQueryParams, SortOption } from "../types/bike";
+import type { BikeCategory, BikeQueryParams, ItemCategory, PartCategory, SortOption } from "../types/bike";
+
+// Kategoriak felsorolasa a szuromezohoz
+const BIKE_CATEGORIES: readonly BikeCategory[] = ["MTB", "Trail", "Enduro", "DH", "E-Bike"];
+const PART_CATEGORIES: readonly PartCategory[] = [
+  "Villa",
+  "Váz",
+  "Fék",
+  "Váltó",
+  "Kerékszett",
+  "Hajtás",
+];
 
 // Engedelyezett oldalméretek es az alapertelmezett ertek
 const DEFAULT_PAGE_SIZE = 12;
@@ -11,7 +22,7 @@ interface FilterBarProps {
   readonly onReset: () => void;
 }
 
-// Ar bemenet validalasa: ures, ervenytelen vagy negativ ertekek kiszurese
+// Ar bemenet validalasa
 function parsePriceInput(rawValue: string): number | undefined {
   if (!rawValue.trim()) {
     return undefined;
@@ -25,9 +36,10 @@ function parsePriceInput(rawValue: string): number | undefined {
 
 // Keresesi es szuresi vezerlopanel komponens
 export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) {
-  // Ellenorizzuk, hogy van-e barmilyen aktiv szurofeltetel vagy egyedi oldalmeret beallitva
+  // Szurofeltetel vagy egyedi oldalmeret ellenorzes
   const hasActiveFilters = Boolean(
     filters.query ||
+      filters.category ||
       filters.min_price !== undefined ||
       filters.max_price !== undefined ||
       filters.location ||
@@ -37,9 +49,10 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
 
   return (
     <div className="bg-[#121f17]/90 border border-emerald-900/30 rounded-2xl p-5 mb-8 shadow-xl backdrop-blur-sm">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      {/* Dinamikus rugalmas szurosav */}
+      <div className="flex flex-wrap items-end gap-3">
         {/* Szoveges kereses mezo */}
-        <div className="lg:col-span-2">
+        <div className="w-64">
           <label
             htmlFor="filter-query"
             className="block text-[11px] font-medium text-emerald-200/70 mb-1"
@@ -56,8 +69,45 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
           />
         </div>
 
-        {/* Helyszin szuro mezo */}
-        <div>
+        {/* Kategoria valaszto mezo */}
+        <div className="w-44">
+          <label
+            htmlFor="filter-category"
+            className="block text-[11px] font-medium text-emerald-200/70 mb-1"
+          >
+            Kategória
+          </label>
+          <select
+            id="filter-category"
+            value={filters.category ?? ""}
+            onChange={(e) =>
+              onFilterChange({
+                category: (e.target.value as ItemCategory) || undefined,
+                page: 1,
+              })
+            }
+            className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+          >
+            <option value="">Összes kategória</option>
+            <optgroup label="Kerékpárok">
+              {BIKE_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Alkatrészek">
+              {PART_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+
+        {/* Helyszin mezo */}
+        <div className="w-48">
           <label
             htmlFor="filter-location"
             className="block text-[11px] font-medium text-emerald-200/70 mb-1"
@@ -74,8 +124,8 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
           />
         </div>
 
-        {/* Minimalis ar szuro mezo */}
-        <div>
+        {/* Minimalis ar mezo */}
+        <div className="w-32">
           <label
             htmlFor="filter-min-price"
             className="block text-[11px] font-medium text-emerald-200/70 mb-1"
@@ -98,8 +148,8 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
           />
         </div>
 
-        {/* Maximalis ar szuro mezo */}
-        <div>
+        {/* Maximalis ar mezo */}
+        <div className="w-32">
           <label
             htmlFor="filter-max-price"
             className="block text-[11px] font-medium text-emerald-200/70 mb-1"
@@ -122,8 +172,8 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
           />
         </div>
 
-        {/* Rendezes kivalaszto legordulo menu */}
-        <div>
+        {/* Rendezes valaszto mezo*/}
+        <div className="w-40">
           <label
             htmlFor="filter-sort"
             className="block text-[11px] font-medium text-emerald-200/70 mb-1"
@@ -146,8 +196,9 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
             <option value="price_desc">Ár: csökkenő</option>
           </select>
         </div>
-        {/* Megjelenitett elemek szama oldalankent */}
-        <div>
+
+        {/* Elemek szama oldalankent */}
+        <div className="w-28">
           <label
             htmlFor="filter-page-size"
             className="block text-[11px] font-medium text-emerald-200/70 mb-1"
