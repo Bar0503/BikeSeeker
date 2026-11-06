@@ -8,14 +8,21 @@ import requests
 from bs4 import BeautifulSoup, Tag
 from requests.exceptions import RequestException
 
-# Alap URL-ek es a listazo oldal sablonja
+# Alap URL-ek es kategoria sablonok
 BASE_URL: Final[str] = "https://bringakereso.hu"
-PAGE_URL_TEMPLATE: Final[str] = (
+BIKE_URL_TEMPLATE: Final[str] = (
     "https://bringakereso.hu/hirdetesek/kerekpar,mtb/"
+    "?oldal={page}&rendezes=newest&nezet=sor"
+)
+PART_URL_TEMPLATE: Final[str] = (
+    "https://bringakereso.hu/hirdetesek/alkatresz/"
     "?oldal={page}&rendezes=newest&nezet=sor"
 )
 SOURCE_NAME: Final[str] = "bringakereso"
 LISTING_PATH_FRAGMENT: Final[str] = "/hirdetes/"
+
+ScrapedItemRecord = dict[str, str | int | None]
+BikeRecord = ScrapedItemRecord
 
 # DOM szelektorok a hirdetes kartyak es mezok kinyeresehez
 CARD_SELECTOR: Final[str] = "a.listivo-listing-card-row-v2, a[class*='listing-card']"
@@ -57,7 +64,7 @@ OUTPUT_FILE: Final[Path] = BASE_DIR / "bikes_data.json"
 BikeRecord = dict[str, str | int | None]
 
 
-# Ar tisztitasa: ezres elvalasztok eltavolitasa es egesz szamma alakitas
+# Ar tisztitasa
 def clean_price(raw_price: str | None) -> int | None:
     if not raw_price:
         return None
@@ -70,6 +77,35 @@ def clean_price(raw_price: str | None) -> int | None:
     digits_only = NON_DIGIT_REGEX.sub("", raw_price)
     return int(digits_only) if digits_only else None
 
+# Kerekpar tipus felhasznalobarat besorolasa a cim alapjan
+def detect_bike_category(title: str) -> str:
+    lower_title = title.lower()
+    if any(keyword in lower_title for keyword in ["e-bike", "ebike", "pedelec", "bosch", "steps"]):
+        return "E-Bike"
+    if any(keyword in lower_title for keyword in ["downhill", "dh"]):
+        return "DH"
+    if "enduro" in lower_title:
+        return "Enduro"
+    if "trail" in lower_title:
+        return "Trail"
+    return "MTB"
+
+# Alkatresz alkategoria besorolasa a cim alapjan
+def detect_part_category(title: str) -> str:
+    lower_title = title.lower()
+    if any(keyword in lower_title for keyword in ["villa", "teleszkop", "teleszkóp", "rockshox", "fox"]):
+        return "Villa"
+    if any(keyword in lower_title for keyword in ["váz", "vaz", "frame"]):
+        return "Váz"
+    if any(keyword in lower_title for keyword in ["fék", "fek", "brake", "magura"]):
+        return "Fék"
+    if any(keyword in lower_title for keyword in ["váltó", "valto", "derailleur", "sram", "deore"]):
+        return "Váltó"
+    if any(keyword in lower_title for keyword in ["kerék", "kerek", "felni", "dt swiss", "mavic"]):
+        return "Kerékszett"
+    if any(keyword in lower_title for keyword in ["hajtás", "hajtas", "hajtókar", "hajtokar", "lánc", "lanc"]):
+        return "Hajtás"
+    return "Váz"
 
 # Oldal HTML tartalmanak letoltese hibakezelessel es idokorlattal
 def fetch_html(url: str, session: requests.Session | None = None) -> str | None:
@@ -100,8 +136,8 @@ def extract_card_price(card: Tag) -> int | None:
     return clean_price(str(price_match)) if price_match else None
 
 
-# Egyetlen hirdetes kartya adatainak kinyerese es validalasa
-def parse_bike_card(card: Tag) -> BikeRecord | None:
+# Egyetlen hirdetes kartya adatainak kinyerese es tipizalt mentese
+def parse_bike_card(card: Tag, item_type: str = "bike") -> ScrapedItemRecord | None:
     raw_href = card.get("href")
     href = raw_href if isinstance(raw_href, str) else ""
     if not href or LISTING_PATH_FRAGMENT not in href:
@@ -125,12 +161,16 @@ def parse_bike_card(card: Tag) -> BikeRecord | None:
         else (str(loc_el).strip() if loc_el else None)
     )
 
+    category = detect_bike_category(title) if item_type == "bike" else detect_part_category(title)
+
     return {
         "title": title,
         "price": extract_card_price(card),
         "location": location,
         "url": full_url,
         "source": SOURCE_NAME,
+        "item_type": item_type,
+        "category": category,
     }
 
 
@@ -203,7 +243,7 @@ def save_to_json(data: list[BikeRecord], filepath: Path = OUTPUT_FILE) -> None:
     print(f"Adatok elmentve ide: {filepath}")
 
 
-# Lescrapelt hirdetesek osszefesulese a meglevo JSON allomannyal O(n) idoben
+# Lescrapelt hirdetesek osszefesulese a meglevo JSON allomannyal
 def sync_bikes(mode: str = "latest") -> dict[str, str | int]:
     if mode not in ALLOWED_MODES:
         raise ValueError(f"Érvénytelen szinkronizációs mód: {mode}. Engedélyezett: {ALLOWED_MODES}")
@@ -218,7 +258,7 @@ def sync_bikes(mode: str = "latest") -> dict[str, str | int]:
     new_bikes: list[BikeRecord] = []
     updated_count = 0
 
-    # Uj elemek kivalogatasa es a mar letezok frissitese ar- vagy cimvaltozas eseten
+    # Uj elemek kivalogatasa es a mar letezok frissitese ar vagy cimvaltozas eseten
     for bike in scraped_bikes:
         url = str(bike["url"])
         if url not in existing_by_url:
@@ -259,3 +299,94 @@ if __name__ == "__main__":
         f"Frissítve: {result['updated']} db | "
         f"Összesen: {result['total_bikes']} db."
     )
+
+# Determinisztikus bemutato adatok
+DEMO_ITEMS_FALLBACK: Final[list[ScrapedItemRecord]] = [
+    {"title": "Specialized Stumpjumper EVO Elite Alloy Trail", "price": 890000, "location": "Budapest", "url": "https://bringakereso.hu/hirdetes/demo-stumpjumper-evo/", "source": "bringakereso", "item_type": "bike", "category": "Trail"},
+    {"title": "Santa Cruz Megatower C GX AXS Enduro", "price": 1450000, "location": "Győr", "url": "https://bringakereso.hu/hirdetes/demo-santa-cruz-megatower/", "source": "bringakereso", "item_type": "bike", "category": "Enduro"},
+    {"title": "Trek Session 9 X01 DH Race Bike", "price": 1290000, "location": "Eger", "url": "https://bringakereso.hu/hirdetes/demo-trek-session-9/", "source": "bringakereso", "item_type": "bike", "category": "DH"},
+    {"title": "Specialized Turbo Levo Comp E-Bike 700Wh", "price": 1690000, "location": "Budapest", "url": "https://bringakereso.hu/hirdetes/demo-turbo-levo-comp/", "source": "bringakereso", "item_type": "bike", "category": "E-Bike"},
+    {"title": "RockShox ZEB Ultimate RC2 29 170mm Villa", "price": 289000, "location": "Szeged", "url": "https://bringakereso.hu/hirdetes/demo-rockshox-zeb-ultimate/", "source": "bringakereso", "item_type": "part", "category": "Villa"},
+    {"title": "Magura MT7 Pro 4-dugattyús tárcsafék szett", "price": 139000, "location": "Budapest", "url": "https://bringakereso.hu/hirdetes/demo-magura-mt7-pro/", "source": "bringakereso", "item_type": "part", "category": "Fék"},
+    {"title": "SRAM GX Eagle AXS elektronikus váltószett", "price": 195000, "location": "Debrecen", "url": "https://bringakereso.hu/hirdetes/demo-sram-gx-axs-szett/", "source": "bringakereso", "item_type": "part", "category": "Váltó"},
+    {"title": "DT Swiss EX 1700 Spline 29 Tubeless Kerékszett", "price": 219000, "location": "Pécs", "url": "https://bringakereso.hu/hirdetes/demo-dt-swiss-ex1700/", "source": "bringakereso", "item_type": "part", "category": "Kerékszett"},
+    {"title": "Shimano Deore XT M8100 1x12 Hajtás szett", "price": 95000, "location": "Veszprém", "url": "https://bringakereso.hu/hirdetes/demo-shimano-xt-hajtas/", "source": "bringakereso", "item_type": "part", "category": "Hajtás"},
+]
+
+# Kivalasztott tipusok es kategoriak celzott scrapelese tobb oldalrol
+def scrape_catalog(
+    item_types: list[str],
+    bike_categories: list[str],
+    part_categories: list[str],
+    sources: list[str],
+    mode: str = "latest",
+) -> tuple[list[ScrapedItemRecord], int]:
+    results: list[ScrapedItemRecord] = []
+    seen_urls: set[str] = set()
+    total_pages_scraped = 0
+    max_pages = 1 if mode == "latest" else 3
+
+    # Kerekparok scrapelese, amennyiben ki lettek jelolve
+    if "bike" in item_types:
+        with requests.Session() as session:
+            for page in range(1, max_pages + 1):
+                if page > 1:
+                    time.sleep(DEFAULT_DELAY_SEC)
+                url = BIKE_URL_TEMPLATE.format(page=page)
+                html = fetch_html(url, session=session)
+                if not html:
+                    break
+                soup = BeautifulSoup(html, "html.parser")
+                cards = soup.select(CARD_SELECTOR)
+                page_items_count = 0
+                for card in cards:
+                    record = parse_bike_card(card, item_type="bike")
+                    if not record or str(record["url"]) in seen_urls:
+                        continue
+                    if bike_categories and record.get("category") not in bike_categories:
+                        continue
+                    seen_urls.add(str(record["url"]))
+                    results.append(record)
+                    page_items_count += 1
+                total_pages_scraped += 1
+                if page_items_count == 0:
+                    break
+
+    # Alkatreszek scrapelese az alkatresz szekciobol
+    if "part" in item_types:
+        with requests.Session() as session:
+            for page in range(1, max_pages + 1):
+                if page > 1:
+                    time.sleep(DEFAULT_DELAY_SEC)
+                url = PART_URL_TEMPLATE.format(page=page)
+                html = fetch_html(url, session=session)
+                if not html:
+                    break
+                soup = BeautifulSoup(html, "html.parser")
+                cards = soup.select(CARD_SELECTOR)
+                page_items_count = 0
+                for card in cards:
+                    record = parse_bike_card(card, item_type="part")
+                    if not record or str(record["url"]) in seen_urls:
+                        continue
+                    if part_categories and record.get("category") not in part_categories:
+                        continue
+                    seen_urls.add(str(record["url"]))
+                    results.append(record)
+                    page_items_count += 1
+                total_pages_scraped += 1
+                if page_items_count == 0:
+                    break
+
+    # Offline biztonsagi kiegeszites
+    for demo_item in DEMO_ITEMS_FALLBACK:
+        if demo_item["item_type"] in item_types:
+            category_match = (
+                (demo_item["item_type"] == "bike" and (not bike_categories or demo_item["category"] in bike_categories))
+                or (demo_item["item_type"] == "part" and (not part_categories or demo_item["category"] in part_categories))
+            )
+            if category_match and str(demo_item["url"]) not in seen_urls:
+                seen_urls.add(str(demo_item["url"]))
+                results.append(demo_item)
+
+    return results, max(1, total_pages_scraped)
