@@ -1,27 +1,116 @@
-// Egyetlen kerekpar hirdetes adatmodellje
-export interface Bike {
+// Hitelesitett felhasznalo modellje a mentett beallitasokkal
+export interface User {
+  readonly id: number;
+  readonly username: string;
+  readonly scrape_preferences?: ScrapeWizardConfig | null;
+}
+
+// Bejelentkezesi adatok tipusa
+export interface LoginCredentials {
+  readonly username: string;
+  readonly password: string;
+}
+
+// Backendrol erkezo JWT token valasz szerkezete
+export interface TokenResponse {
+  readonly access_token: string;
+  readonly token_type: string;
+  readonly user: User;
+}
+
+// Alapelem tipusok
+export type ItemType = "bike" | "part";
+
+// Kerekpar alkategoriak felsorolasa
+export type BikeCategory = "MTB" | "Trail" | "Enduro" | "DH" | "E-Bike";
+
+// Alkatresz alkategoriak felsorolasa
+export type PartCategory =
+  | "Villa"
+  | "Váz"
+  | "Fék"
+  | "Váltó"
+  | "Kerékszett"
+  | "Hajtás";
+
+// Egysegesitett kategoria tipus
+export type ItemCategory = BikeCategory | PartCategory;
+
+// Tamogatott forrasoldalak piacterei
+export type ScrapeSource = "bringakereso" | "testbike" | "bikemag";
+
+// Scrape varazslo konfiguracios adatmodellje
+export interface ScrapeWizardConfig {
+  readonly item_types: readonly ItemType[];
+  readonly bike_categories: readonly BikeCategory[];
+  readonly part_categories: readonly PartCategory[];
+  readonly sources: readonly ScrapeSource[];
+}
+
+// Csoportok modellje
+export interface Group {
+  readonly id: number;
+  readonly name: string;
+  readonly description: string | null;
+  readonly created_at: string;
+  readonly item_count?: number;
+  readonly items_count?: number;
+}
+
+export interface GroupCreate {
+  readonly name: string;
+  readonly description?: string | null;
+}
+
+export interface GroupUpdate {
+  readonly name?: string;
+  readonly description?: string | null;
+}
+
+// Hirdetesek es tettelek modellje
+export interface Item {
+  readonly id: number;
   readonly title: string;
   readonly price: number | null;
   readonly location: string | null;
   readonly url: string;
   readonly source: string;
+  readonly item_type: ItemType;
+  readonly category: ItemCategory;
+  readonly notes?: string | null;
+  readonly group_ids?: readonly number[];
 }
 
-// Ar szerinti rendezesi iranyok tipusa
+export interface ItemCreate {
+  readonly title: string;
+  readonly price?: number | null;
+  readonly location?: string | null;
+  readonly url: string;
+  readonly source: string;
+  readonly item_type: ItemType;
+  readonly category: ItemCategory;
+  readonly notes?: string | null;
+  readonly group_ids?: readonly number[];
+}
+
+export interface ItemUpdate {
+  readonly title?: string;
+  readonly price?: number | null;
+  readonly location?: string | null;
+  readonly item_type?: ItemType;
+  readonly category?: ItemCategory;
+  readonly notes?: string | null;
+}
+
+// Rendezesi iranyok
 export type SortOption = "price_asc" | "price_desc";
 
-// Lapozott backend valasz szerkezete a kerekpar listahoz
-export interface BikeListResponse {
-  readonly total: number;
-  readonly page: number;
-  readonly page_size: number;
-  readonly total_pages: number;
-  readonly items: readonly Bike[];
-}
-
-// Kereseshez, szureshez es lapozashoz hasznalt lekerdezesi parameterek
-export interface BikeQueryParams {
+// Osszetett lekerdezesi parameterek szureshez es lapozashoz
+export interface ItemQueryParams {
   readonly query?: string;
+  readonly item_type?: ItemType;
+  readonly category?: ItemCategory;
+  readonly group_id?: number;
   readonly min_price?: number;
   readonly max_price?: number;
   readonly location?: string;
@@ -30,12 +119,25 @@ export interface BikeQueryParams {
   readonly page_size?: number;
 }
 
-// Scraper futtatasi modok: csak a legfrissebb oldal vagy a teljes hirdeteslista
+// Lapozott lista valaszmodell
+export interface ItemListResponse {
+  readonly total: number;
+  readonly page: number;
+  readonly page_size: number;
+  readonly total_pages: number;
+  readonly items: readonly Item[];
+}
+
+// Visszafele kompatibilitasi aliasok a meglevo komponensekhez
+export type Bike = Item;
+export type BikeQueryParams = ItemQueryParams;
+export type BikeListResponse = ItemListResponse;
+
+// Scraper futtatasi modok es valasz
 export type ScrapeMode = "latest" | "all";
 
-// Scraper szinkronizacio utani backend valasz szerkezete
 export interface ScrapeResponse {
-  readonly mode: ScrapeMode;
+  readonly mode: string;
   readonly pages_scraped: number;
   readonly new_added: number;
   readonly updated: number;
