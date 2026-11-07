@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Group, Item } from "../types/bike";
 
 // Kerekpar kartya bemeneti tulajdonsagai kibovitve csoportokkal es CRUD muveletekkel
@@ -7,6 +7,7 @@ interface BikeCardProps {
   readonly groups: readonly Group[];
   readonly activeGroupId?: number;
   readonly onEdit: (item: Item) => void;
+  readonly onDelete: (id: number) => Promise<void>;
   readonly onToggleGroup: (
     groupId: number,
     itemId: number,
@@ -29,13 +30,39 @@ export function BikeCard({
   groups,
   activeGroupId,
   onEdit,
+  onDelete,
   onToggleGroup,
   onClearNotes,
 }: BikeCardProps) {
   const [isRemovingFromGroup, setIsRemovingFromGroup] = useState<boolean>(false);
   const [isClearingNotes, setIsClearingNotes] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState<boolean>(false);
   const [groupLoadingId, setGroupLoadingId] = useState<number | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Kivulre kattintas es escape billentyu figyelese a csoportvalaszto bezarasahoz
+  useEffect(() => {
+    if (!isGroupDropdownOpen) {
+      return;
+    }
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsGroupDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setIsGroupDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isGroupDropdownOpen]);
 
   // Megjegyzes torlese megerositessel
   const handleClearNotesClick = async (e: React.MouseEvent): Promise<void> => {
@@ -49,6 +76,21 @@ export function BikeCard({
       await onClearNotes(bike.id);
     } finally {
       setIsClearingNotes(false);
+    }
+  };
+
+  // Hirdetes vegleges torlese megerositessel
+  const handleDeleteItemClick = async (e: React.MouseEvent): Promise<void> => {
+    e.stopPropagation();
+    const confirmed = window.confirm("Biztosan törlöd ezt a tételt az adatbázisból?");
+    if (!confirmed) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await onDelete(bike.id);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -139,8 +181,8 @@ export function BikeCard({
           {bike.title}
         </h3>
 
-        {/* Szemelyes jegyzet doboz jobb felso ceruza es kuka funkciogombokkal */}
-        {bike.notes && (
+        {/* Szemelyes jegyzet doboz */}
+        {activeGroupId !== undefined && bike.notes && (
           <div className="bg-emerald-950/40 border border-emerald-800/40 text-emerald-200/90 rounded-lg p-2.5 mb-2.5 flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <span className="block font-semibold text-emerald-400 text-[11px] mb-0.5">
@@ -246,7 +288,7 @@ export function BikeCard({
 
         {/* CRUD muveleti gombsor */}
         <div className="flex items-center justify-between pt-2 border-t border-emerald-950">
-          <div className="relative">
+          <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setIsGroupDropdownOpen((prev) => !prev)}
@@ -302,28 +344,55 @@ export function BikeCard({
               </div>
             )}
           </div>
-
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onEdit(bike)}
-              className="text-stone-400 hover:text-emerald-300 p-1.5 rounded-lg border border-emerald-900/50 hover:border-emerald-600/50 bg-[#0a120d] transition-colors flex items-center justify-center"
-              title={bike.notes ? "Jegyzet megtekintése / szerkesztése" : "Jegyzet hozzáadása"}
-            >
-              <svg
-                className="w-4 h-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            {/* Szerkesztes gomb */}
+            {activeGroupId !== undefined && (
+              <button
+                type="button"
+                onClick={() => onEdit(bike)}
+                className="text-stone-400 hover:text-emerald-300 p-1.5 rounded-lg border border-emerald-900/50 hover:border-emerald-600/50 bg-[#0a120d] transition-colors flex items-center justify-center"
+                title="Hirdetés adatainak és jegyzetének szerkesztése"
               >
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                <line x1="8" y1="9" x2="16" y2="9" />
-                <line x1="8" y1="13" x2="13" y2="13" />
-              </svg>
-            </button>
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </button>
+            )}
+
+            {/* Vegleges torles */}
+            {activeGroupId === undefined && (
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteItemClick}
+                className="text-stone-400 hover:text-rose-400 p-1.5 rounded-lg border border-emerald-900/50 hover:border-rose-900/50 bg-[#0a120d] transition-colors flex items-center justify-center disabled:opacity-50"
+                title="Hirdetés végleges törlése az adatbázisból"
+              >
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            )}
+
+            {/* Csoportbol valo eltavolitas */}
             {activeGroupId !== undefined && (
               <button
                 type="button"

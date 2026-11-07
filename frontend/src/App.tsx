@@ -122,19 +122,25 @@ function App() {
     []
   );
 
-  // Szurok valtozasakor ujratoltes
+  // Kezdo csoportlista lekerese bejelentkezeskor
+  useEffect(() => {
+    if (isAuth && !showSplash) {
+      reloadGroups();
+    }
+  }, [isAuth, showSplash, reloadGroups]);
+
+  // Szurok es lapozas valtozasakor hirdetesek ujratoltese
   useEffect(() => {
     if (!isAuth || showSplash) {
       return;
     }
     const controller = new AbortController();
     loadItems(filters, controller.signal);
-    reloadGroups();
 
     return () => {
       controller.abort();
     };
-  }, [filters, isAuth, showSplash, loadItems, reloadGroups]);
+  }, [filters, isAuth, showSplash, loadItems]);
 
   // Sikeres bejelentkezes utan splash animacio inditasa
   const handleLoginSuccess = (user: User): void => {
@@ -247,34 +253,13 @@ function App() {
     loadItems(filters);
   };
 
-  // Scrape varazslo beallitasainak mentese a felhasznaloi profilba
-  const handleSaveWizardConfig = async (config: ScrapeWizardConfig): Promise<void> => {
-    try {
-      await savePreferences(config);
-      setCurrentUser((prev) => (prev ? { ...prev, scrape_preferences: config } : prev));
-      setSyncMessage("A Scrape Varázsló beállításai sikeresen elmentve!");
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Hiba történt a beállítások mentésekor.";
-      setError(message);
-    }
-  };
-
-  // Eles scraping inditasa a kozponti zold gombbal a mentett beallitasok alapjan
-  const handleRunHeroScrape = async (): Promise<void> => {
-    if (isScraping) {
-      return;
-    }
+  // Kozponti scrapeles vegrehajto fuggveny
+  const executeScrape = async (config: ScrapeWizardConfig): Promise<void> => {
     setIsScraping(true);
     setError(null);
     setSyncMessage(null);
     try {
-      const configToUse: ScrapeWizardConfig = currentUser?.scrape_preferences ?? {
-        item_types: ["bike", "part"],
-        bike_categories: ["MTB", "Trail", "Enduro", "DH", "E-Bike"],
-        part_categories: ["Villa", "Váz", "Fék", "Váltó", "Kerékszett", "Hajtás"],
-        sources: ["bringakereso", "testbike"],
-      };
-      const result = await triggerWizardScrape(configToUse);
+      const result = await triggerWizardScrape(config);
       const totalInDb =
         (result as { total_items?: number; total_bikes?: number }).total_items ??
         result.total_bikes ??
@@ -290,6 +275,37 @@ function App() {
       setError(message);
     } finally {
       setIsScraping(false);
+    }
+  };
+
+  // Eles scraping inditasa a kozponti zold gombbal
+  const handleRunHeroScrape = async (): Promise<void> => {
+    if (isScraping) {
+      return;
+    }
+    const configToUse: ScrapeWizardConfig = currentUser?.scrape_preferences ?? {
+      item_types: ["bike", "part"],
+      bike_categories: ["MTB", "Trail", "Enduro", "DH", "E-Bike"],
+      part_categories: ["Villa", "Váz", "Fék", "Váltó", "Kerékszett", "Hajtás"],
+      sources: ["bringakereso", "testbike"],
+    };
+    await executeScrape(configToUse);
+  };
+
+  // Scrape varazslo beallitasainak mentese a felhasznaloi profilba
+  const handleSaveWizardConfig = async (
+    config: ScrapeWizardConfig,
+    saveToProfile: boolean
+  ): Promise<void> => {
+    try {
+      if (saveToProfile) {
+        await savePreferences(config);
+        setCurrentUser((prev) => (prev ? { ...prev, scrape_preferences: config } : prev));
+        setSyncMessage("A Scrape Varázsló beállításai sikeresen elmentve!");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Hiba történt a beállítások mentésekor.";
+      setError(message);
     }
   };
 
@@ -495,6 +511,7 @@ function App() {
                     setEditingItem(it);
                     setIsItemModalOpen(true);
                   }}
+                  onDelete={handleDeleteItem}
                   onToggleGroup={handleToggleGroupForItem}
                   onClearNotes={handleClearNotes}
                 />

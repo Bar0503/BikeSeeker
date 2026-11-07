@@ -1,14 +1,15 @@
 import { useEffect, useState, type SyntheticEvent } from "react";
-import type {
-  BikeCategory,
-  Group,
-  Item,
-  ItemCategory,
-  ItemCreate,
-  ItemType,
-  ItemUpdate,
-  PartCategory,
-  ScrapeSource,
+import {
+  BIKE_CATEGORIES,
+  PART_CATEGORIES,
+  SOURCES,
+  type Group,
+  type Item,
+  type ItemCategory,
+  type ItemCreate,
+  type ItemType,
+  type ItemUpdate,
+  type ScrapeSource,
 } from "../types/bike";
 
 // Uj tetel modalis ablak bemeneti parameterei
@@ -22,25 +23,6 @@ interface ItemEditModalProps {
     isEdit: boolean
   ) => Promise<void>;
 }
-
-const BIKE_CATEGORIES: readonly BikeCategory[] = [
-  "MTB",
-  "Trail",
-  "Enduro",
-  "DH",
-  "E-Bike",
-];
-
-const PART_CATEGORIES: readonly PartCategory[] = [
-  "Villa",
-  "Váz",
-  "Fék",
-  "Váltó",
-  "Kerékszett",
-  "Hajtás",
-];
-
-const SOURCES: readonly ScrapeSource[] = ["bringakereso", "testbike", "bikemag"];
 
 export function ItemEditModal({
   isOpen,
@@ -168,7 +150,7 @@ export function ItemEditModal({
       <div className="bg-[#0e1711] border border-emerald-900/60 rounded-2xl max-w-xl w-full p-6 text-stone-100 shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between pb-3 border-b border-emerald-900/40">
           <h2 className="text-lg font-bold text-stone-100">
-            {isEdit ? "Személyes jegyzet szerkesztése" : "Külső hirdetés mentése a gyűjteménybe"}
+            {isEdit ? "Hirdetés és jegyzet szerkesztése" : "Külső hirdetés mentése a gyűjteménybe"}
           </h2>
           <button
             type="button"
@@ -187,135 +169,124 @@ export function ItemEditModal({
         )}
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto pr-1 mt-4 space-y-3.5">
-          {/* Meglevo tetel eseten rovid tajekoztato doboz */}
-          {isEdit && item && (
-            <div className="bg-[#121f17] border border-emerald-900/40 rounded-xl p-3 text-xs space-y-1">
-              <div className="font-semibold text-stone-200 line-clamp-1">{item.title}</div>
-              <div className="flex items-center gap-3 text-emerald-400 text-[11px]">
-                <span>{item.price !== null ? `${item.price.toLocaleString("hu-HU")} Ft` : "Ár megegyezés szerint"}</span>
-                {item.location && <span className="text-stone-400">• {item.location}</span>}
-                <span className="text-stone-500">• {item.category} ({item.source})</span>
-              </div>
-            </div>
-          )}
+          {/* Cím bevitele vagy modositasa */}
+          <div>
+            <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
+              Hirdetés címe *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="pl. Trek Remedy 8 2022 Enduro..."
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
 
-          {/* Uj tetel rogzitesenel megjelenitett urlapmezok */}
+          {/* Fotipus es alkategoria valasztas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
+                Főtípus
+              </label>
+              <select
+                value={itemType}
+                onChange={(e) => handleItemTypeChange(e.target.value as ItemType)}
+                className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="bike">Kerékpár</option>
+                <option value="part">Alkatrész</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
+                Alkategória
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as ItemCategory)}
+                className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500"
+              >
+                {itemType === "bike"
+                  ? BIKE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))
+                  : PART_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Ar es helyszin megadasa */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
+                Ár (Ft)
+              </label>
+              <input
+                type="number"
+                min={0}
+                placeholder="pl. 240000"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
+                Helyszín
+              </label>
+              <input
+                type="text"
+                placeholder="pl. Budapest, Győr..."
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Piacter es eredeti URL beallitasa uj tetel eseten */}
           {!isEdit && (
-            <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
-                  Hirdetés címe *
+                  Forrás piactér
+                </label>
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value as ScrapeSource)}
+                  className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500"
+                >
+                  {SOURCES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
+                  Eredeti URL
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="pl. Trek Remedy 8 2022 Enduro..."
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="https://..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
                   className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500"
                 />
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
-                    Főtípus
-                  </label>
-                  <select
-                    value={itemType}
-                    onChange={(e) => handleItemTypeChange(e.target.value as ItemType)}
-                    className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="bike">Kerékpár</option>
-                    <option value="part">Alkatrész</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
-                    Alkategória
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as ItemCategory)}
-                    className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500"
-                  >
-                    {itemType === "bike"
-                      ? BIKE_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))
-                      : PART_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
-                    Ár (Ft)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="pl. 240000"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
-                    Helyszín
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="pl. Budapest, Győr..."
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
-                    Forrás piactér
-                  </label>
-                  <select
-                    value={source}
-                    onChange={(e) => setSource(e.target.value as ScrapeSource)}
-                    className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 focus:outline-none focus:border-emerald-500"
-                  >
-                    {SOURCES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-emerald-300/80 mb-1">
-                    Eredeti URL
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="https://..."
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-            </>
+            </div>
           )}
 
           {/* Szemelyes feljegyzes*/}
@@ -391,7 +362,7 @@ export function ItemEditModal({
               {isSubmitting
                 ? "Mentés folyamatban..."
                 : isEdit
-                ? "Jegyzet mentése"
+                ? "Módosítások mentése"
                 : "Hirdetés mentése"}
             </button>
           </div>

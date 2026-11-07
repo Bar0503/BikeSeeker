@@ -1,17 +1,13 @@
-import type { BikeCategory, BikeQueryParams, ItemCategory, PartCategory, SortOption } from "../types/bike";
+import { useEffect, useState } from "react";
+import {
+  BIKE_CATEGORIES,
+  PART_CATEGORIES,
+  type BikeQueryParams,
+  type ItemCategory,
+  type SortOption,
+} from "../types/bike";
 
-// Kategoriak felsorolasa a szuromezohoz
-const BIKE_CATEGORIES: readonly BikeCategory[] = ["MTB", "Trail", "Enduro", "DH", "E-Bike"];
-const PART_CATEGORIES: readonly PartCategory[] = [
-  "Villa",
-  "Váz",
-  "Fék",
-  "Váltó",
-  "Kerékszett",
-  "Hajtás",
-];
-
-// Engedelyezett oldalméretek es az alapertelmezett ertek
+// Engedelyezett oldalmeretek es az alapertelmezett ertek
 const DEFAULT_PAGE_SIZE = 12;
 const PAGE_SIZE_OPTIONS: readonly number[] = [12, 20, 50, 100];
 
@@ -22,7 +18,7 @@ interface FilterBarProps {
   readonly onReset: () => void;
 }
 
-// Ar bemenet validalasa
+// Ar bemenet szamertekké alakitasa
 function parsePriceInput(rawValue: string): number | undefined {
   if (!rawValue.trim()) {
     return undefined;
@@ -36,7 +32,38 @@ function parsePriceInput(rawValue: string): number | undefined {
 
 // Keresesi es szuresi vezerlopanel komponens
 export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) {
-  // Szurofeltetel vagy egyedi oldalmeret ellenorzes
+  const [localQuery, setLocalQuery] = useState<string>(filters.query ?? "");
+  const [localLocation, setLocalLocation] = useState<string>(filters.location ?? "");
+
+  // Kulso szurovaltozasok szinkronizalasa a helyi beviteli allapotba
+  useEffect(() => {
+    setLocalQuery(filters.query ?? "");
+  }, [filters.query]);
+
+  useEffect(() => {
+    setLocalLocation(filters.location ?? "");
+  }, [filters.location]);
+
+  // Keresomezo kesleltetett szinkronizalasa a felesleges API keresek megelozesere
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localQuery !== (filters.query ?? "")) {
+        onFilterChange({ query: localQuery, page: 1 });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localQuery, filters.query, onFilterChange]);
+
+  // Telepules mezo kesleltetett szinkronizalasa
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localLocation !== (filters.location ?? "")) {
+        onFilterChange({ location: localLocation, page: 1 });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [localLocation, filters.location, onFilterChange]);
+
   const hasActiveFilters = Boolean(
     filters.query ||
       filters.category ||
@@ -49,7 +76,6 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
 
   return (
     <div className="bg-[#121f17]/90 border border-emerald-900/30 rounded-2xl p-5 mb-8 shadow-xl backdrop-blur-sm">
-      {/* Dinamikus rugalmas szurosav */}
       <div className="flex flex-wrap items-end gap-3">
         {/* Szoveges kereses mezo */}
         <div className="w-64">
@@ -63,8 +89,8 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
             id="filter-query"
             type="text"
             placeholder="pl. Genesis, Trek, Merida..."
-            value={filters.query ?? ""}
-            onChange={(e) => onFilterChange({ query: e.target.value, page: 1 })}
+            value={localQuery}
+            onChange={(e) => setLocalQuery(e.target.value)}
             className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500 transition-colors"
           />
         </div>
@@ -118,8 +144,8 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
             id="filter-location"
             type="text"
             placeholder="pl. Budapest, Eger..."
-            value={filters.location ?? ""}
-            onChange={(e) => onFilterChange({ location: e.target.value, page: 1 })}
+            value={localLocation}
+            onChange={(e) => setLocalLocation(e.target.value)}
             className="w-full bg-[#0a120d] border border-emerald-900/40 rounded-lg px-3 py-2 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500 transition-colors"
           />
         </div>
@@ -225,7 +251,7 @@ export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) 
         </div>
       </div>
 
-      {/* Szurok alaphelyzetbe allitasa gomb, ha van aktiv szuro */}
+      {/* Szurok alaphelyzetbe allitasa gomb */}
       {hasActiveFilters && (
         <div className="mt-4 pt-3 border-t border-emerald-900/30 flex justify-end">
           <button

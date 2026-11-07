@@ -33,11 +33,33 @@ export type PartCategory =
   | "Kerékszett"
   | "Hajtás";
 
+// Kerekpar alkategoriak kozponti konstans listaja
+export const BIKE_CATEGORIES: readonly BikeCategory[] = [
+  "MTB",
+  "Trail",
+  "Enduro",
+  "DH",
+  "E-Bike",
+];
+
+// Alkatresz alkategoriak kozponti konstans listaja
+export const PART_CATEGORIES: readonly PartCategory[] = [
+  "Villa",
+  "Váz",
+  "Fék",
+  "Váltó",
+  "Kerékszett",
+  "Hajtás",
+];
+
 // Egysegesitett kategoria tipus
 export type ItemCategory = BikeCategory | PartCategory;
 
 // Tamogatott forrasoldalak piacterei
 export type ScrapeSource = "bringakereso" | "testbike" | "bikemag";
+
+// Tamogatott forrasoldalak kozponti listaja
+export const SOURCES: readonly ScrapeSource[] = ["bringakereso", "testbike", "bikemag"];
 
 // Scrape varazslo konfiguracios adatmodellje
 export interface ScrapeWizardConfig {

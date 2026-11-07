@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import type {
-  BikeCategory,
-  ItemType,
-  PartCategory,
-  ScrapeSource,
-  ScrapeWizardConfig,
+import {
+  BIKE_CATEGORIES,
+  PART_CATEGORIES,
+  type BikeCategory,
+  type ItemType,
+  type PartCategory,
+  type ScrapeSource,
+  type ScrapeWizardConfig,
 } from "../types/bike";
 
 // Modalis ablak bemeneti parameterei
@@ -12,26 +14,14 @@ interface ScrapeWizardModalProps {
   readonly isOpen: boolean;
   readonly initialConfig?: ScrapeWizardConfig | null;
   readonly onClose: () => void;
-  readonly onSaveConfig: (config: ScrapeWizardConfig) => Promise<void>;
+  readonly onSaveConfig: (
+    config: ScrapeWizardConfig,
+    saveToProfile: boolean
+  ) => Promise<void>;
 }
 
-// Alapertelmezett konstans ertekek es felsorolasok
-const AVAILABLE_BIKE_CATEGORIES: readonly BikeCategory[] = [
-  "MTB",
-  "Trail",
-  "Enduro",
-  "DH",
-  "E-Bike",
-];
-
-const AVAILABLE_PART_CATEGORIES: readonly PartCategory[] = [
-  "Villa",
-  "Váz",
-  "Fék",
-  "Váltó",
-  "Kerékszett",
-  "Hajtás",
-];
+const AVAILABLE_BIKE_CATEGORIES = BIKE_CATEGORIES;
+const AVAILABLE_PART_CATEGORIES = PART_CATEGORIES;
 
 const AVAILABLE_SOURCES: readonly {
   readonly id: ScrapeSource;
@@ -191,7 +181,7 @@ export function ScrapeWizardModal({
     setCurrentStep((prev) => Math.max(1, prev - 1));
   };
 
-  // Scraper beallitasok perzisztens mentese a profilhoz
+  // Scraper beallitasok mentese a profilba es ablak bezarasa
   const handleConfirmSave = async (): Promise<void> => {
     setSubmitting(true);
     setValidationError(null);
@@ -202,11 +192,11 @@ export function ScrapeWizardModal({
         part_categories: itemTypes.includes("part") ? partCategories : [],
         sources,
       };
-      await onSaveConfig(config);
+      await onSaveConfig(config, saveAsDefault);
       onClose();
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Nem sikerült elmenteni a beállításokat.";
+        err instanceof Error ? err.message : "Nem sikerült a beállítások mentése.";
       setValidationError(message);
     } finally {
       setSubmitting(false);
@@ -229,7 +219,7 @@ export function ScrapeWizardModal({
               {currentStep === 1 && "Fő típus kiválasztása"}
               {currentStep === 2 && "Kategóriák és alkategóriák"}
               {currentStep === 3 && "Forrás piacterek kijelölése"}
-              {currentStep === 4 && "Összegzés és indítás"}
+              {currentStep === 4 && "Összegzés és mentés"}
             </h2>
           </div>
           <button
@@ -495,17 +485,70 @@ export function ScrapeWizardModal({
                 </div>
               </div>
 
-              {/* Preferenciak mentese opcio */}
-              <label className="flex items-center gap-2.5 text-xs text-stone-300 bg-[#0a120d] p-3 rounded-xl border border-emerald-900/30 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={saveAsDefault}
-                  onChange={(e) => setSaveAsDefault(e.target.checked)}
-                  className="rounded border-emerald-700 text-emerald-500 focus:ring-emerald-500 bg-[#121f17]"
-                />
-                <span>
-                  Beállítások mentése a fiókomban (legközelebb automatikusan ez jelenik meg)
-                </span>
+              {/* Preferenciak mentese opcio modern kapcsologombbal */}
+              <label
+                className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  saveAsDefault
+                    ? "bg-[#121f17] border-emerald-500/50 shadow-md shadow-emerald-950/40"
+                    : "bg-[#0a120d] border-emerald-900/30 hover:border-emerald-800/50"
+                }`}
+              >
+                <div className="flex items-center gap-3 select-none pr-3">
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-colors flex-shrink-0 ${
+                      saveAsDefault
+                        ? "bg-emerald-950 text-emerald-400 border-emerald-800/60"
+                        : "bg-[#070d09] text-stone-500 border-emerald-950"
+                    }`}
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" />
+                      <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-stone-100">
+                      Beállítások mentése a fiókomban
+                    </div>
+                    <div className="text-[11px] text-stone-400">
+                      Legközelebb automatikusan ezek a szűrési preferenciák töltődnek be
+                    </div>
+                  </div>
+                </div>
+
+                {/* Kapcsologomb allapotvezerloje animacioval */}
+                <div className="relative inline-flex items-center flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={saveAsDefault}
+                    onChange={(e) => setSaveAsDefault(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 flex items-center border ${
+                      saveAsDefault
+                        ? "bg-emerald-500 border-emerald-400"
+                        : "bg-[#070d09] border-emerald-900/60"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full transition-transform duration-200 transform ${
+                        saveAsDefault
+                          ? "translate-x-5 bg-stone-950 shadow-sm"
+                          : "translate-x-0 bg-stone-500"
+                      }`}
+                    />
+                  </div>
+                </div>
               </label>
             </div>
           )}
@@ -557,7 +600,7 @@ export function ScrapeWizardModal({
                     Mentés folyamatban...
                   </>
                 ) : (
-                  "Scrape beállítások mentése"
+                  "Beállítások mentése"
                 )}
               </button>
             )}
