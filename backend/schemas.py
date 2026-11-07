@@ -59,6 +59,7 @@ class GroupResponse(BaseModel):
     description: str | None = None
     created_at: datetime
     items_count: int = 0
+    item_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,6 +77,7 @@ class ItemBase(BaseModel):
 # Uj hirdetes letrehozasa akar azonnali csoport hozzerendelessel
 class ItemCreate(ItemBase):
     group_id: int | None = None
+    group_ids: list[int] = Field(default_factory=list)
 
 # Hirdetes adatainak es felhasznaloi megjegyzesenek modositasa
 class ItemUpdate(BaseModel):

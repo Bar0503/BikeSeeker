@@ -17,10 +17,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# Jelszo ellenorzese a tarolt bcrypt hash alapjan biztonsagi fallbackkel
+# Jelszo ellenorzese a tarolt bcrypt hash alapjan
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    if hashed_password == plain_password:
-        return True
     try:
         return bcrypt.checkpw(
             plain_password.encode("utf-8"),

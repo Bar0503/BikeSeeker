@@ -11,8 +11,7 @@ from typing import Final
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from auth import create_access_token, get_current_user, get_password_hash, verify_password
 from database import Base, SessionLocal, engine, get_db
@@ -33,6 +32,7 @@ from schemas import (
     TokenResponse,
     UserResponse,
 )
+from seed import seed_database
 
 # Projekt gyokerkonyvtar hozzaadasa az eleresi uthoz a scraper modul importalasahoz
 BASE_DIR: Final[Path] = Path(__file__).resolve().parent.parent
@@ -50,60 +50,11 @@ SCRAPER_DIR: Final[Path] = BASE_DIR / "scraper"
 DATA_FILE: Final[Path] = SCRAPER_DIR / "bikes_data.json"
 SAMPLE_DATA_FILE: Final[Path] = SCRAPER_DIR / "bikes_data.sample.json"
 
-# Adatbazis inicializalasa alapertelmezett felhasznaloval es kezdeti csoportokkal
+# Adatbazis inicializalasa kozponti seed fuggvennyel
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        # Admin fiok inicializalasa, ha meg nem letezik
-        admin_user = db.query(User).filter(User.username == "admin").first()
-        if not admin_user:
-            default_prefs = json.dumps(
-                ScrapePreferencesSchema().model_dump(),
-                ensure_ascii=False
-            )
-            seeded_admin = User(
-                username="admin",
-                password_hash=get_password_hash("admin"),
-                scrape_preferences=default_prefs,
-            )
-            db.add(seeded_admin)
-            db.commit()
-
-        # Alapertelmezett gyujtemeny csoport letrehozasa kizarolag Kedvencek neven
-        if db.query(Group).count() == 0:
-            fav_group = Group(name="Kedvencek", description="Kiemelt és elmentett hirdetések")
-            db.add(fav_group)
-            db.commit()
-
-        # Minta hirdetesek betoltese
-        if db.query(Item).count() == 0 and SAMPLE_DATA_FILE.exists():
-            with open(SAMPLE_DATA_FILE, "r", encoding="utf-8") as f:
-                sample_items = json.load(f)
-                fav_group = db.query(Group).filter(Group.name == "Kedvencek").first()
-                for idx, raw_item in enumerate(sample_items):
-                    item_entity = Item(
-                        title=raw_item.get("title", ""),
-                        price=raw_item.get("price"),
-                        location=raw_item.get("location"),
-                        url=raw_item.get("url", ""),
-                        source=raw_item.get("source", "bringakereso"),
-                        item_type="bike",
-                        category="MTB",
-                        notes=None,
-                    )
-                    # Csak az elso 3 bico kerul automatikusan a Kedvencek koze
-                    if fav_group and idx < 3:
-                        item_entity.groups.append(fav_group)
-                    db.add(item_entity)
-                db.commit()
-    finally:
-        db.close()
+    seed_database()
     yield
-
-# Konfiguracios konstansok es CORS beallitasok
-ALLOWED_ORIGINS: Final[list[str]] = os.getenv("CORS_ORIGINS", "*").split(",")
 
 app = FastAPI(
     title="BikeSeeker API",
@@ -120,6 +71,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 # Rendezesi opciok felsorolasa
@@ -284,9 +236,16 @@ def update_preferences(
 
 # Csoportok listazasa az elemek szamaval
 @app.get("/api/groups", response_model=list[GroupResponse])
-def get_groups(db: Session = Depends(get_db)) -> list[dict[str, object]]:
-    groups = db.query(Group).order_by(Group.created_at.desc()).all()
-    # Csoport elemszam visszaadasa mindket mezoben a frontend kompatibilitashoz
+def get_groups(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict[str, object]]:
+    groups = (
+        db.query(Group)
+        .options(selectinload(Group.items))
+        .order_by(Group.created_at.desc())
+        .all()
+    )
     return [
         {
             "id": g.id,
@@ -301,7 +260,11 @@ def get_groups(db: Session = Depends(get_db)) -> list[dict[str, object]]:
 
 # Uj csoport letrehozasa
 @app.post("/api/groups", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
-def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> dict[str, object]:
+def create_group(
+    payload: GroupCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
     new_group = Group(
         name=payload.name.strip(),
         description=payload.description.strip() if payload.description else None,
@@ -315,12 +278,22 @@ def create_group(payload: GroupCreate, db: Session = Depends(get_db)) -> dict[st
         "description": new_group.description,
         "created_at": new_group.created_at,
         "items_count": 0,
+        "item_count": 0,
     }
 
 # Egyetlen csoport lekerese azonosito alapjan
 @app.get("/api/groups/{group_id}", response_model=GroupResponse)
-def get_group(group_id: int, db: Session = Depends(get_db)) -> dict[str, object]:
-    group = db.query(Group).filter(Group.id == group_id).first()
+def get_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    group = (
+        db.query(Group)
+        .options(selectinload(Group.items))
+        .filter(Group.id == group_id)
+        .first()
+    )
     if not group:
         raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
     return {
@@ -329,6 +302,7 @@ def get_group(group_id: int, db: Session = Depends(get_db)) -> dict[str, object]
         "description": group.description,
         "created_at": group.created_at,
         "items_count": len(group.items),
+        "item_count": len(group.items),
     }
 
 # Csoport adatainak modositasa
@@ -337,8 +311,14 @@ def update_group(
     group_id: int,
     payload: GroupUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
-    group = db.query(Group).filter(Group.id == group_id).first()
+    group = (
+        db.query(Group)
+        .options(selectinload(Group.items))
+        .filter(Group.id == group_id)
+        .first()
+    )
     if not group:
         raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
     if payload.name is not None:
@@ -353,11 +333,16 @@ def update_group(
         "description": group.description,
         "created_at": group.created_at,
         "items_count": len(group.items),
+        "item_count": len(group.items),
     }
 
 # Csoport torlese a hirdetesek megorzesével
 @app.delete("/api/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_group(group_id: int, db: Session = Depends(get_db)) -> None:
+def delete_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
@@ -370,8 +355,14 @@ def add_item_to_group(
     group_id: int,
     item_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
-    group = db.query(Group).filter(Group.id == group_id).first()
+    group = (
+        db.query(Group)
+        .options(selectinload(Group.items))
+        .filter(Group.id == group_id)
+        .first()
+    )
     if not group:
         raise HTTPException(status_code=404, detail="A csoport nem található.")
     item = db.query(Item).filter(Item.id == item_id).first()
@@ -387,6 +378,7 @@ def add_item_to_group(
         "description": group.description,
         "created_at": group.created_at,
         "items_count": len(group.items),
+        "item_count": len(group.items),
     }
 
 # Hirdetes eltavolitasa egy csoportbol
@@ -395,6 +387,7 @@ def remove_item_from_group(
     group_id: int,
     item_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
@@ -457,7 +450,7 @@ def get_bikes(
         "items": paginated_items,
     }
 
-# Hirdetesek es alkatreszek lekerdezese osszetett szuressel es lapozassal
+# Hirdetesek es alkatreszek lekerdezese osszetett szuressel, lapozassal es Eager Loadinggal
 @app.get("/api/items", response_model=ItemListResponse)
 def get_items(
     item_type: str | None = Query(default=None, description="Típus szűrés: bike vagy part"),
@@ -472,11 +465,12 @@ def get_items(
     page: int = Query(default=1, ge=1, description="Oldalszám"),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE, description="Oldalméret"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(status_code=400, detail="A minimum ár nem lehet nagyobb a maximum árnál.")
 
-    sql_query = db.query(Item)
+    sql_query = db.query(Item).options(selectinload(Item.groups))
 
     # Szures kapcsolodo csoport alapjan
     if group_id is not None:
@@ -539,9 +533,13 @@ def get_items(
         ],
     }
 
-# Uj hirdetes vagy alkatresz manualis letrehozasa
+# Uj hirdetes vagy alkatresz manualis letrehozasa tobb csoport tamogatassal
 @app.post("/api/items", response_model=ItemResponse, status_code=status.HTTP_201_CREATED)
-def create_item(payload: ItemCreate, db: Session = Depends(get_db)) -> dict[str, object]:
+def create_item(
+    payload: ItemCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
     existing = db.query(Item).filter(Item.url == payload.url.strip()).first()
     if existing:
         raise HTTPException(status_code=400, detail="Ezzel az URL-lel már létezik tétel az adatbázisban.")
@@ -556,10 +554,15 @@ def create_item(payload: ItemCreate, db: Session = Depends(get_db)) -> dict[str,
         category=payload.category.strip() if payload.category else None,
         notes=payload.notes.strip() if payload.notes else None,
     )
+
+    # Csoport tagsagok hozzarendelese (egyedi es tobbes mezo tamogatassal)
+    target_group_ids = set(payload.group_ids)
     if payload.group_id is not None:
-        group = db.query(Group).filter(Group.id == payload.group_id).first()
-        if group:
-            new_item.groups.append(group)
+        target_group_ids.add(payload.group_id)
+
+    if target_group_ids:
+        matched_groups = db.query(Group).filter(Group.id.in_(target_group_ids)).all()
+        new_item.groups.extend(matched_groups)
 
     db.add(new_item)
     db.commit()
@@ -584,8 +587,14 @@ def update_item(
     item_id: int,
     payload: ItemUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
-    item = db.query(Item).filter(Item.id == item_id).first()
+    item = (
+        db.query(Item)
+        .options(selectinload(Item.groups))
+        .filter(Item.id == item_id)
+        .first()
+    )
     if not item:
         raise HTTPException(status_code=404, detail="A hirdetés nem található.")
 
@@ -624,7 +633,11 @@ def update_item(
 
 # Hirdetes vegleges torlese az adatbazisbol
 @app.delete("/api/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_item(item_id: int, db: Session = Depends(get_db)) -> None:
+def delete_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
     item = db.query(Item).filter(Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="A hirdetés nem található.")
@@ -636,6 +649,7 @@ def delete_item(item_id: int, db: Session = Depends(get_db)) -> None:
 def trigger_catalog_scrape(
     payload: ScrapeTriggerRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
     scraped_items, pages_scraped = scrape_catalog(
         item_types=payload.item_types,
@@ -691,11 +705,11 @@ def trigger_catalog_scrape(
         "total_items": total_in_db,
     }
 
-
 # Scraper szinkronizacio inditasa a valasztott modban
 @app.post("/api/bikes/scrape", response_model=ScrapeResponse)
 def trigger_scrape(
     mode: ScrapeMode = Query(default=ScrapeMode.LATEST, description="Szinkronizációs mód: latest vagy all"),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, str | int]:
     try:
         return sync_bikes(mode=mode.value)

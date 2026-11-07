@@ -86,19 +86,28 @@ SAMPLE_PARTS: Final[list[dict[str, str | int | None]]] = [
 ]
 
 # Tablak letrehozasa es kezdo adatok betoltese
-def seed_database() -> None:
-    print("[BikeSeeker] Adatbázis táblák ellenőrzése és létrehozása...")
+def seed_database(db_session: SessionLocal | None = None) -> None:
+    print("[BikeSeeker] Adatbázis táblák ellenőrzése és inicializálása...")
     Base.metadata.create_all(bind=engine)
 
-    db = SessionLocal()
+    db = db_session or SessionLocal()
     try:
         # Alapertelmezett admin felhasznalo letrehozasa
         admin_user = db.query(User).filter(User.username == "admin").first()
         if not admin_user:
+            default_prefs = json.dumps(
+                {
+                    "item_types": ["bike"],
+                    "bike_categories": ["MTB", "Trail", "Enduro", "DH", "E-Bike"],
+                    "part_categories": ["Villa", "Váz", "Fék", "Váltó", "Kerékszett", "Hajtás"],
+                    "sources": ["bringakereso"],
+                },
+                ensure_ascii=False,
+            )
             admin_user = User(
                 username="admin",
                 password_hash=hash_password("admin"),
-                scrape_preferences=None,
+                scrape_preferences=default_prefs,
             )
             db.add(admin_user)
             print("[BikeSeeker] Admin fiók létrehozva (admin / admin).")
