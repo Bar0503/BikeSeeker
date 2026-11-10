@@ -8,7 +8,6 @@ import type {
   ItemQueryParams,
   ItemUpdate,
   LoginCredentials,
-  ScrapeMode,
   ScrapeResponse,
   ScrapeWizardConfig,
   TokenResponse,
@@ -163,9 +162,6 @@ export async function fetchItems(
 
   return (await response.json()) as ItemListResponse;
 }
-
-// Visszafele kompatibilis lekerdezo fuggveny
-export const fetchBikes = fetchItems;
 
 // Uj hirdetes letrehozasa
 export async function createItem(payload: ItemCreate): Promise<Item> {
@@ -332,23 +328,6 @@ export async function triggerWizardScrape(config: ScrapeWizardConfig): Promise<S
     const errorMessage = await extractApiErrorMessage(
       response,
       "Nem sikerült elindítani a hirdetések letöltését"
-    );
-    throw new Error(errorMessage);
-  }
-
-  return (await response.json()) as ScrapeResponse;
-}
-
-// Visszafele kompatibilis scraper inditas
-export async function triggerScrape(mode: ScrapeMode): Promise<ScrapeResponse> {
-  const response = await authFetch(`${API_BASE_URL}/bikes/scrape?mode=${mode}`, {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    const errorMessage = await extractApiErrorMessage(
-      response,
-      "Nem sikerült a hirdetések frissítése"
     );
     throw new Error(errorMessage);
   }

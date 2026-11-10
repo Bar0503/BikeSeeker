@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import {
   BIKE_CATEGORIES,
   PART_CATEGORIES,
-  type BikeQueryParams,
   type ItemCategory,
+  type ItemQueryParams,
   type SortOption,
 } from "../types/bike";
 
@@ -13,8 +13,8 @@ const PAGE_SIZE_OPTIONS: readonly number[] = [12, 20, 50, 100];
 
 // Szurosav komponens bemeneti tulajdonsagai
 interface FilterBarProps {
-  readonly filters: BikeQueryParams;
-  readonly onFilterChange: (updated: Partial<BikeQueryParams>) => void;
+  readonly filters: ItemQueryParams;
+  readonly onFilterChange: (updated: Partial<ItemQueryParams>) => void;
   readonly onReset: () => void;
 }
 

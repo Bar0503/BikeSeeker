@@ -265,13 +265,8 @@ function App() {
     setSyncMessage(null);
     try {
       const result = await triggerWizardScrape(config);
-      const totalInDb =
-        (result as { total_items?: number; total_bikes?: number }).total_items ??
-        result.total_bikes ??
-        (data ? data.total + result.new_added : 0);
-
       setSyncMessage(
-        `Scrapelés kész: +${result.new_added} új tétel letöltve, ${result.updated} frissítve (Összesen: ${totalInDb} db az adatbázisban)`
+        `Scrapelés kész: +${result.new_added} új tétel letöltve, ${result.updated} frissítve (Összesen: ${result.total_items} db az adatbázisban)`
       );
       refreshData();
     } catch (err: unknown) {

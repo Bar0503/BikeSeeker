@@ -150,18 +150,13 @@ export interface ItemListResponse {
   readonly items: readonly Item[];
 }
 
-// Visszafele kompatibilitasi aliasok a meglevo komponensekhez
-export type Bike = Item;
-export type BikeQueryParams = ItemQueryParams;
-export type BikeListResponse = ItemListResponse;
-
 // Scraper futtatasi modok es valasz
 export type ScrapeMode = "latest" | "all";
 
 export interface ScrapeResponse {
-  readonly mode: string;
+  readonly mode: ScrapeMode;
   readonly pages_scraped: number;
   readonly new_added: number;
   readonly updated: number;
-  readonly total_bikes: number;
+  readonly total_items: number;
 }
