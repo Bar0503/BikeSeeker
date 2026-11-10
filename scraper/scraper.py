@@ -1,7 +1,4 @@
-import json
-from pathlib import Path
 import re
-import sys
 import time
 from typing import Final
 import requests
@@ -22,7 +19,6 @@ SOURCE_NAME: Final[str] = "bringakereso"
 LISTING_PATH_FRAGMENT: Final[str] = "/hirdetes/"
 
 ScrapedItemRecord = dict[str, str | int | None]
-BikeRecord = ScrapedItemRecord
 
 # DOM szelektorok a hirdetes kartyak es mezok kinyeresehez
 CARD_SELECTOR: Final[str] = "a.listivo-listing-card-row-v2, a[class*='listing-card']"
@@ -34,9 +30,7 @@ PRICE_SELECTOR: Final[str] = "[class*='price'], [class*='amount']"
 
 # Halozati es lapozasi konstansok
 REQUEST_TIMEOUT_SEC: Final[int] = 10
-DEFAULT_MAX_PAGES: Final[int] = 30
 DEFAULT_DELAY_SEC: Final[float] = 0.8
-ALLOWED_MODES: Final[tuple[str, ...]] = ("latest", "all")
 
 # Elore leforditott reguláris kifejezesek a gyorsabb szovegfeldolgozashoz
 PRICE_WITH_CURRENCY_REGEX: Final[re.Pattern[str]] = re.compile(
@@ -56,10 +50,6 @@ HEADERS: Final[dict[str, str]] = {
         "Chrome/120.0.0.0 Safari/537.36"
     )
 }
-
-# Mappa eleresi utak es kimeneti fajl meghatarozasa
-BASE_DIR: Final[Path] = Path(__file__).resolve().parent
-OUTPUT_FILE: Final[Path] = BASE_DIR / "bikes_data.json"
 
 
 # Ar tisztitasa
@@ -171,146 +161,6 @@ def parse_bike_card(card: Tag, item_type: str = "bike") -> ScrapedItemRecord | N
         "category": category,
     }
 
-
-# Oldalak vegiglapozasa a megadott sablon es mod alapjan
-def scrape_pages(
-    mode: str = "latest",
-    max_pages: int = DEFAULT_MAX_PAGES,
-    delay_sec: float = DEFAULT_DELAY_SEC,
-    url_template: str = BIKE_URL_TEMPLATE,
-) -> tuple[list[BikeRecord], int]:
-    scraped_bikes: list[BikeRecord] = []
-    seen_in_run: set[str] = set()
-    pages_scraped = 0
-    target_max_page = 1 if mode == "latest" else max_pages
-
-    # Halozati munkamenet letrehozasa kapcsolatujrahasznositassal
-    with requests.Session() as session:
-        for page in range(1, target_max_page + 1):
-            if page > 1:
-                time.sleep(delay_sec)
-
-            url = url_template.format(page=page)
-            html = fetch_html(url, session=session)
-            if not html:
-                break
-
-            soup = BeautifulSoup(html, "html.parser")
-            cards = soup.select(CARD_SELECTOR)
-
-            new_on_page = 0
-            for card in cards:
-                bike_data = parse_bike_card(card)
-                if not bike_data:
-                    continue
-
-                bike_url = str(bike_data["url"])
-                if bike_url not in seen_in_run:
-                    seen_in_run.add(bike_url)
-                    scraped_bikes.append(bike_data)
-                    new_on_page += 1
-
-            pages_scraped += 1
-            print(f"[{page}. oldal] +{new_on_page} kerékpár ezen az oldalon (Eddig: {len(scraped_bikes)} db)")
-
-            if new_on_page == 0:
-                print("Elértük az utolsó oldalt, nincs több új hirdetés.")
-                break
-
-    return scraped_bikes, pages_scraped
-
-
-# Meglevo hirdetesek biztonsagos betoltese a JSON fajlbol
-def load_existing_bikes(filepath: Path = OUTPUT_FILE) -> list[BikeRecord]:
-    if not filepath.exists():
-        return []
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError) as err:
-        print(f"Figyelem: A meglévő JSON nem olvasható ({err}), üres listával indulunk.")
-        return []
-
-
-# Hirdetesek atomi mentese JSON fajlba ideiglenes fajlon keresztul
-def save_to_json(data: list[BikeRecord], filepath: Path = OUTPUT_FILE) -> None:
-    temp_file = filepath.with_suffix(".tmp")
-    with open(temp_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    temp_file.replace(filepath)
-    print(f"Adatok elmentve ide: {filepath}")
-
-
-# Lescrapelt hirdetesek osszefesulese a meglevo JSON allomannyal
-def sync_bikes(mode: str = "latest") -> dict[str, str | int]:
-    if mode not in ALLOWED_MODES:
-        raise ValueError(f"Érvénytelen szinkronizációs mód: {mode}. Engedélyezett: {ALLOWED_MODES}")
-
-    existing_bikes = load_existing_bikes()
-    existing_by_url = {
-        str(bike["url"]): bike for bike in existing_bikes if "url" in bike
-    }
-
-    scraped_bikes, pages_scraped = scrape_pages(mode=mode)
-
-    new_bikes: list[BikeRecord] = []
-    updated_count = 0
-
-    # Uj elemek kivalogatasa es a mar letezok frissitese ar vagy cimvaltozas eseten
-    for bike in scraped_bikes:
-        url = str(bike["url"])
-        if url not in existing_by_url:
-            new_bikes.append(bike)
-            existing_by_url[url] = bike
-            continue
-
-        old_bike = existing_by_url[url]
-        if old_bike.get("price") != bike.get("price") or old_bike.get("title") != bike.get("title"):
-            old_bike["price"] = bike.get("price")
-            old_bike["title"] = bike.get("title")
-            old_bike["location"] = bike.get("location")
-            updated_count += 1
-
-    merged_bikes = new_bikes + existing_bikes
-
-    if new_bikes or updated_count > 0 or not OUTPUT_FILE.exists():
-        save_to_json(merged_bikes)
-    else:
-        print("Nem történt változás, nem volt szükség fájlírásra.")
-
-    return {
-        "mode": mode,
-        "pages_scraped": pages_scraped,
-        "new_added": len(new_bikes),
-        "updated": updated_count,
-        "total_bikes": len(merged_bikes),
-    }
-
-
-if __name__ == "__main__":
-    run_mode = "all" if "--all" in sys.argv else "latest"
-    result = sync_bikes(mode=run_mode)
-    print(
-        f"\nSzinkronizáció kész ({result['mode']})! "
-        f"Lekért oldalak: {result['pages_scraped']} | "
-        f"Új: +{result['new_added']} db | "
-        f"Frissítve: {result['updated']} db | "
-        f"Összesen: {result['total_bikes']} db."
-    )
-
-# Determinisztikus bemutato adatok
-DEMO_ITEMS_FALLBACK: Final[list[ScrapedItemRecord]] = [
-    {"title": "Specialized Stumpjumper EVO Elite Alloy Trail", "price": 890000, "location": "Budapest", "url": "https://bringakereso.hu/hirdetes/demo-stumpjumper-evo/", "source": "bringakereso", "item_type": "bike", "category": "Trail"},
-    {"title": "Santa Cruz Megatower C GX AXS Enduro", "price": 1450000, "location": "Győr", "url": "https://bringakereso.hu/hirdetes/demo-santa-cruz-megatower/", "source": "bringakereso", "item_type": "bike", "category": "Enduro"},
-    {"title": "Trek Session 9 X01 DH Race Bike", "price": 1290000, "location": "Eger", "url": "https://bringakereso.hu/hirdetes/demo-trek-session-9/", "source": "bringakereso", "item_type": "bike", "category": "DH"},
-    {"title": "Specialized Turbo Levo Comp E-Bike 700Wh", "price": 1690000, "location": "Budapest", "url": "https://bringakereso.hu/hirdetes/demo-turbo-levo-comp/", "source": "bringakereso", "item_type": "bike", "category": "E-Bike"},
-    {"title": "RockShox ZEB Ultimate RC2 29 170mm Villa", "price": 289000, "location": "Szeged", "url": "https://bringakereso.hu/hirdetes/demo-rockshox-zeb-ultimate/", "source": "bringakereso", "item_type": "part", "category": "Villa"},
-    {"title": "Magura MT7 Pro 4-dugattyús tárcsafék szett", "price": 139000, "location": "Budapest", "url": "https://bringakereso.hu/hirdetes/demo-magura-mt7-pro/", "source": "bringakereso", "item_type": "part", "category": "Fék"},
-    {"title": "SRAM GX Eagle AXS elektronikus váltószett", "price": 195000, "location": "Debrecen", "url": "https://bringakereso.hu/hirdetes/demo-sram-gx-axs-szett/", "source": "bringakereso", "item_type": "part", "category": "Váltó"},
-    {"title": "DT Swiss EX 1700 Spline 29 Tubeless Kerékszett", "price": 219000, "location": "Pécs", "url": "https://bringakereso.hu/hirdetes/demo-dt-swiss-ex1700/", "source": "bringakereso", "item_type": "part", "category": "Kerékszett"},
-    {"title": "Shimano Deore XT M8100 1x12 Hajtás szett", "price": 95000, "location": "Veszprém", "url": "https://bringakereso.hu/hirdetes/demo-shimano-xt-hajtas/", "source": "bringakereso", "item_type": "part", "category": "Hajtás"},
-]
 
 # Determinisztikus bemutato adatok tobb forrasoldal lefedesehez
 DEMO_ITEMS_FALLBACK: Final[list[ScrapedItemRecord]] = [
