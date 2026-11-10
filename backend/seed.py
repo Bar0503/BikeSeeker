@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 from typing import Final
 import bcrypt
+from sqlalchemy.orm import Session
 
 # Mappak rogzitese a keresesi utvonalhoz
 CURRENT_DIR: Final[Path] = Path(__file__).resolve().parent
@@ -86,7 +87,7 @@ SAMPLE_PARTS: Final[list[dict[str, str | int | None]]] = [
 ]
 
 # Tablak letrehozasa es kezdo adatok betoltese
-def seed_database(db_session: SessionLocal | None = None) -> None:
+def seed_database(db_session: Session | None = None) -> None:
     print("[BikeSeeker] Adatbázis táblák ellenőrzése és inicializálása...")
     Base.metadata.create_all(bind=engine)
 
@@ -193,7 +194,9 @@ def seed_database(db_session: SessionLocal | None = None) -> None:
             print("[BikeSeeker] Az adatbázis már tartalmaz adatokat, seedelés kihagyva.")
 
     finally:
-        db.close()
+        # Csak a sajat magunk altal nyitott munkamenetet zarjuk le
+        if db_session is None:
+            db.close()
 
 if __name__ == "__main__":
     seed_database()
