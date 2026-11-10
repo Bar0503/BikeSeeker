@@ -34,15 +34,18 @@ function parsePriceInput(rawValue: string): number | undefined {
 export function FilterBar({ filters, onFilterChange, onReset }: FilterBarProps) {
   const [localQuery, setLocalQuery] = useState<string>(filters.query ?? "");
   const [localLocation, setLocalLocation] = useState<string>(filters.location ?? "");
+  const [syncedQuery, setSyncedQuery] = useState<string | undefined>(filters.query);
+  const [syncedLocation, setSyncedLocation] = useState<string | undefined>(filters.location);
 
-  // Kulso szurovaltozasok szinkronizalasa a helyi beviteli allapotba
-  useEffect(() => {
+  // Kulso szurovaltozas (pl. visszaallitas) atvetele rendereles kozben, effect nelkul
+  if (filters.query !== syncedQuery) {
+    setSyncedQuery(filters.query);
     setLocalQuery(filters.query ?? "");
-  }, [filters.query]);
-
-  useEffect(() => {
+  }
+  if (filters.location !== syncedLocation) {
+    setSyncedLocation(filters.location);
     setLocalLocation(filters.location ?? "");
-  }, [filters.location]);
+  }
 
   // Keresomezo kesleltetett szinkronizalasa a felesleges API keresek megelozesere
   useEffect(() => {
