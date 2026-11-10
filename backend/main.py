@@ -26,6 +26,7 @@ from schemas import (
     ItemUpdate,
     LoginRequest,
     PreferencesUpdateRequest,
+    ScrapeMode,
     ScrapePreferencesSchema,
     ScrapeTriggerRequest,
     ScrapeTriggerResponse,
@@ -79,12 +80,6 @@ app.add_middleware(
 class SortOption(str, Enum):
     PRICE_ASC = "price_asc"
     PRICE_DESC = "price_desc"
-
-
-# Scraper szinkronizacios modok felsorolasa
-class ScrapeMode(str, Enum):
-    LATEST = "latest"
-    ALL = "all"
 
 
 # Pydantic adatmodellek a keresek es valaszok validalasahoz
@@ -650,7 +645,7 @@ def trigger_catalog_scrape(
         bike_categories=payload.bike_categories,
         part_categories=payload.part_categories,
         sources=payload.sources,
-        mode=payload.mode,
+        mode=payload.mode.value,
     )
 
     new_added = 0
@@ -692,7 +687,7 @@ def trigger_catalog_scrape(
     total_in_db = db.query(Item).count()
 
     return {
-        "mode": payload.mode,
+        "mode": payload.mode.value,
         "pages_scraped": pages_scraped,
         "new_added": new_added,
         "updated": updated,

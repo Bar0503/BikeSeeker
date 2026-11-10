@@ -1,8 +1,14 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
+from enum import Enum
 from typing import Final
 
 NULL_NOT_ALLOWED_MESSAGE: Final[str] = "A mező értéke nem lehet null."
+
+# Scraper szinkronizacios modok felsorolasa
+class ScrapeMode(str, Enum):
+    LATEST = "latest"
+    ALL = "all"
 
 # Felhasznaloi bejelentkezeshez szukseges adatok
 class LoginRequest(BaseModel):
@@ -151,7 +157,7 @@ class ScrapeTriggerRequest(BaseModel):
         default_factory=lambda: ["Villa", "Váz", "Fék", "Váltó", "Kerékszett", "Hajtás"]
     )
     sources: list[str] = Field(default_factory=lambda: ["bringakereso"])
-    mode: str = Field(default="latest")
+    mode: ScrapeMode = ScrapeMode.LATEST
 
 # Scrape futtatas eredmenyenek osszesitese
 class ScrapeTriggerResponse(BaseModel):
