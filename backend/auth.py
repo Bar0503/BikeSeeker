@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 import os
-from typing import Any
+from pathlib import Path
+import secrets
+from typing import Any, Final
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -10,10 +12,30 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User
 
+# Titkos kulcs forrasai: kornyezeti valtozo, kulonben a gitignore-olt helyi fajl
+SECRET_KEY_ENV_VAR: Final[str] = "JWT_SECRET_KEY"
+SECRET_KEY_FILE: Final[Path] = Path(__file__).resolve().parent / ".jwt_secret"
+SECRET_KEY_BYTES: Final[int] = 32
+
+# JWT titkos kulcs betoltese, elso indulaskor veletlen kulcs generalasa es mentese
+def load_secret_key() -> str:
+    env_key = os.getenv(SECRET_KEY_ENV_VAR)
+    if env_key:
+        return env_key
+
+    if SECRET_KEY_FILE.exists():
+        stored_key = SECRET_KEY_FILE.read_text(encoding="utf-8").strip()
+        if stored_key:
+            return stored_key
+
+    new_key = secrets.token_urlsafe(SECRET_KEY_BYTES)
+    SECRET_KEY_FILE.write_text(new_key, encoding="utf-8")
+    return new_key
+
 # Biztonsagi beallitasok es JWT konfiguracios konstansok
-SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "bikeseeker_super_secret_jwt_key_2026")
-ALGORITHM: str = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+SECRET_KEY: Final[str] = load_secret_key()
+ALGORITHM: Final[str] = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES: Final[int] = 60 * 24
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 

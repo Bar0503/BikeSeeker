@@ -17,5 +17,6 @@ backend/bikes_data.json
 Thumbs.db
 .env
 .env.local
+.jwt_secret
 bikeseeker.db
 *.db
