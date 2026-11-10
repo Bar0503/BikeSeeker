@@ -70,6 +70,7 @@ function App() {
 
   // Modalis ablakok allapotai
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
+  const [sessionScrapeConfig, setSessionScrapeConfig] = useState<ScrapeWizardConfig | null>(null);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [isItemModalOpen, setIsItemModalOpen] = useState<boolean>(false);
 
@@ -156,6 +157,7 @@ function App() {
     setCurrentUser(null);
     setData(null);
     setGroups([]);
+    setSessionScrapeConfig(null);
   };
 
   // Szurok reszleges frissitese
@@ -283,7 +285,8 @@ function App() {
     if (isScraping) {
       return;
     }
-    const configToUse: ScrapeWizardConfig = currentUser?.scrape_preferences ?? {
+    // Elsobbseg: munkamenet beallitas, majd fiokba mentett, vegul alapertelmezett
+    const configToUse: ScrapeWizardConfig = sessionScrapeConfig ?? currentUser?.scrape_preferences ?? {
       item_types: ["bike", "part"],
       bike_categories: ["MTB", "Trail", "Enduro", "DH", "E-Bike"],
       part_categories: ["Villa", "Váz", "Fék", "Váltó", "Kerékszett", "Hajtás"],
@@ -292,21 +295,21 @@ function App() {
     await executeScrape(configToUse);
   };
 
-  // Scrape varazslo beallitasainak mentese a felhasznaloi profilba
+  // Varazslo beallitasai: fiokba mentes vagy csak az oldal frissiteseig
+  // Mentesi hibat a varazslo jeleniti meg, ezert itt nem kapjuk el
   const handleSaveWizardConfig = async (
     config: ScrapeWizardConfig,
     saveToProfile: boolean
   ): Promise<void> => {
-    try {
-      if (saveToProfile) {
-        await savePreferences(config);
-        setCurrentUser((prev) => (prev ? { ...prev, scrape_preferences: config } : prev));
-        setSyncMessage("A Scrape Varázsló beállításai sikeresen elmentve!");
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Hiba történt a beállítások mentésekor.";
-      setError(message);
+    if (!saveToProfile) {
+      setSessionScrapeConfig(config);
+      setSyncMessage("A beállítások az oldal frissítéséig érvényesek.");
+      return;
     }
+    await savePreferences(config);
+    setCurrentUser((prev) => (prev ? { ...prev, scrape_preferences: config } : prev));
+    setSessionScrapeConfig(null);
+    setSyncMessage("A Scrape Varázsló beállításai sikeresen elmentve a fiókodba!");
   };
 
   // 1. Allapot: Belepesi kepernyo
@@ -530,7 +533,7 @@ function App() {
       {/* Scrape Varazslo modalis ablak */}
       <ScrapeWizardModal
         isOpen={isWizardOpen}
-        initialConfig={currentUser?.scrape_preferences}
+        initialConfig={sessionScrapeConfig ?? currentUser?.scrape_preferences}
         onClose={() => setIsWizardOpen(false)}
         onSaveConfig={handleSaveWizardConfig}
       />

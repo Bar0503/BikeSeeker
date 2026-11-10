@@ -520,7 +520,9 @@ export function ScrapeWizardModal({
                       Beállítások mentése a fiókomban
                     </div>
                     <div className="text-[11px] text-stone-400">
-                      Legközelebb automatikusan ezek a szűrési preferenciák töltődnek be
+                      {saveAsDefault
+                        ? "Legközelebb automatikusan ezek a szűrési preferenciák töltődnek be"
+                        : "Kikapcsolva a beállítások csak az oldal frissítéséig érvényesek"}
                     </div>
                   </div>
                 </div>
