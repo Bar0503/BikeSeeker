@@ -219,8 +219,8 @@ export async function deleteItem(id: number): Promise<void> {
 }
 
 // Csoportok listazasa a bennuk levo elemek szamaval es mezok szinkronizalasa
-export async function fetchGroups(): Promise<readonly Group[]> {
-  const response = await authFetch(`${API_BASE_URL}/groups`);
+export async function fetchGroups(signal?: AbortSignal): Promise<readonly Group[]> {
+  const response = await authFetch(`${API_BASE_URL}/groups`, { signal });
   if (!response.ok) {
     const errorMessage = await extractApiErrorMessage(
       response,

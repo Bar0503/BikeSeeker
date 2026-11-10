@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   Group,
   GroupCreate,
@@ -53,6 +53,18 @@ const DEFAULT_FILTERS: Readonly<ItemQueryParams> = {
   page_size: DEFAULT_PAGE_SIZE,
 };
 
+// Egy tetel-lekerdezes eredmenye a hozza tartozo szurokkel
+interface ItemsResult {
+  readonly filters: ItemQueryParams;
+  readonly data: ItemListResponse | null;
+  readonly error: string | null;
+}
+
+// Megszakitott keres felismerese, ezt nem kell hibakent kezelni
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
 function App() {
   // Autentikacios es splash allapotok
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -60,13 +72,18 @@ function App() {
   const [showSplash, setShowSplash] = useState<boolean>(false);
 
   // Adat- es szuroallapotok
-  const [data, setData] = useState<ItemListResponse | null>(null);
+  const [itemsResult, setItemsResult] = useState<ItemsResult | null>(null);
   const [groups, setGroups] = useState<readonly Group[]>([]);
   const [filters, setFilters] = useState<ItemQueryParams>(DEFAULT_FILTERS);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [dataVersion, setDataVersion] = useState<number>(0);
   const [isScraping, setIsScraping] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // Betoltes akkor fut, ha az utolso eredmeny meg nem az aktualis szurokhoz tartozik
+  const loading = itemsResult?.filters !== filters;
+  const data = itemsResult?.data ?? null;
+  const itemsError = itemsResult?.error ?? null;
 
   // Modalis ablakok allapotai
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
@@ -85,68 +102,52 @@ function App() {
     }
   }, [isAuth]);
 
-  // Csoportok lekerese a szerverrol
-  const reloadGroups = useCallback(async (): Promise<void> => {
-    try {
-      const fetched = await fetchGroups();
-      setGroups(fetched);
-    } catch (err: unknown) {
-      console.error("Csoportok betöltési hiba:", err);
-    }
-  }, []);
+  // Adatmodosito muveletek utan a tetelek es csoportok ujratoltesenek kerese
+  const refreshData = (): void => {
+    setDataVersion((version) => version + 1);
+  };
 
-  // Hirdetesek es alkatreszek betoltese
-  const loadItems = useCallback(
-    (currentFilters: ItemQueryParams, signal?: AbortSignal): void => {
-      setLoading(true);
-      fetchItems(currentFilters, signal)
-        .then((res) => {
-          // Torles utan megszunt oldal helyett az utolso letezo oldalra lepunk
-          if (res.page > res.total_pages && res.total > 0) {
-            setFilters((prev) => ({ ...prev, page: res.total_pages }));
-            return;
-          }
-          setData(res);
-          setError(null);
-        })
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === "AbortError") {
-            return;
-          }
-          const message =
-            err instanceof Error
-              ? err.message
-              : "Váratlan hiba történt a tételek betöltésekor.";
-          setError(message);
-        })
-        .finally(() => {
-          if (!signal?.aborted) {
-            setLoading(false);
-          }
-        });
-    },
-    []
-  );
-
-  // Kezdo csoportlista lekerese bejelentkezeskor
-  useEffect(() => {
-    if (isAuth && !showSplash) {
-      reloadGroups();
-    }
-  }, [isAuth, showSplash, reloadGroups]);
-
-  // Szurok es lapozas valtozasakor hirdetesek ujratoltese
+  // Csoportok betoltese bejelentkezeskor es adatmodositas utan
   useEffect(() => {
     if (!isAuth || showSplash) {
       return;
     }
     const controller = new AbortController();
-    loadItems(filters, controller.signal);
+    fetchGroups(controller.signal)
+      .then(setGroups)
+      .catch((err: unknown) => {
+        if (!isAbortError(err)) {
+          console.error("Csoportok betöltési hiba:", err);
+        }
+      });
+    return () => controller.abort();
+  }, [isAuth, showSplash, dataVersion]);
 
-    return () => {
-      controller.abort();
-    };
-  }, [filters, isAuth, showSplash, loadItems]);
+  // Tetelek betoltese szurovaltozaskor es adatmodositas utan, elavult keres megszakitasaval
+  useEffect(() => {
+    if (!isAuth || showSplash) {
+      return;
+    }
+    const controller = new AbortController();
+    fetchItems(filters, controller.signal)
+      .then((res) => {
+        // Torles utan megszunt oldal helyett az utolso letezo oldalra lepunk
+        if (res.page > res.total_pages && res.total > 0) {
+          setFilters((prev) => ({ ...prev, page: res.total_pages }));
+          return;
+        }
+        setItemsResult({ filters, data: res, error: null });
+      })
+      .catch((err: unknown) => {
+        if (isAbortError(err)) {
+          return;
+        }
+        const message =
+          err instanceof Error ? err.message : "Váratlan hiba történt a tételek betöltésekor.";
+        setItemsResult({ filters, data: null, error: message });
+      });
+    return () => controller.abort();
+  }, [filters, isAuth, showSplash, dataVersion]);
 
   // Sikeres bejelentkezes utan splash animacio inditasa
   const handleLoginSuccess = (user: User): void => {
@@ -160,7 +161,7 @@ function App() {
     logout();
     setIsAuth(false);
     setCurrentUser(null);
-    setData(null);
+    setItemsResult(null);
     setGroups([]);
     setSessionScrapeConfig(null);
   };
@@ -200,13 +201,13 @@ function App() {
   // Uj csoport letrehozasa
   const handleCreateGroup = async (payload: GroupCreate): Promise<void> => {
     await createGroup(payload);
-    await reloadGroups();
+    refreshData();
   };
 
   // Meglevo csoport modositasa
   const handleUpdateGroup = async (id: number, payload: GroupUpdate): Promise<void> => {
     await updateGroup(id, payload);
-    await reloadGroups();
+    refreshData();
   };
 
   // Csoport torlese
@@ -215,7 +216,7 @@ function App() {
     if (filters.group_id === id) {
       setFilters((prev) => ({ ...prev, group_id: undefined, page: 1 }));
     }
-    await reloadGroups();
+    refreshData();
   };
 
   // Hirdetes letrehozasa vagy szerkesztese
@@ -228,15 +229,13 @@ function App() {
     } else {
       await createItem(payload as ItemCreate);
     }
-    loadItems(filters);
-    reloadGroups();
+    refreshData();
   };
 
   // Hirdetes torlese es lista ujratoltese
   const handleDeleteItem = async (id: number): Promise<void> => {
     await deleteItem(id);
-    loadItems(filters);
-    reloadGroups();
+    refreshData();
   };
 
   // Hirdetes csoport tagsaganak kapcsolasa
@@ -250,20 +249,19 @@ function App() {
     } else {
       await addItemToGroup(groupId, itemId);
     }
-    loadItems(filters);
-    reloadGroups();
+    refreshData();
   };
 
   // Hirdeteshez tartozo egyedi jegyzet torlese es lista ujratoltese
   const handleClearNotes = async (itemId: number): Promise<void> => {
     await updateItem(itemId, { notes: null });
-    loadItems(filters);
+    refreshData();
   };
 
   // Kozponti scrapeles vegrehajto fuggveny
   const executeScrape = async (config: ScrapeWizardConfig): Promise<void> => {
     setIsScraping(true);
-    setError(null);
+    setScrapeError(null);
     setSyncMessage(null);
     try {
       const result = await triggerWizardScrape(config);
@@ -275,11 +273,10 @@ function App() {
       setSyncMessage(
         `Scrapelés kész: +${result.new_added} új tétel letöltve, ${result.updated} frissítve (Összesen: ${totalInDb} db az adatbázisban)`
       );
-      loadItems(filters);
-      reloadGroups();
+      refreshData();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Hiba történt a keresés futtatásakor.";
-      setError(message);
+      setScrapeError(message);
     } finally {
       setIsScraping(false);
     }
@@ -457,6 +454,20 @@ function App() {
           </div>
         )}
 
+        {/* Scrape hiba sav, a racsot nem takarja el */}
+        {scrapeError && (
+          <div className="mb-6 bg-rose-950/40 border border-rose-900/50 text-rose-300 px-4 py-3 rounded-xl text-xs flex items-center justify-between">
+            <span>{scrapeError}</span>
+            <button
+              type="button"
+              onClick={() => setScrapeError(null)}
+              className="text-rose-400 hover:text-rose-200 font-semibold ml-4"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/*Csoportok CRUD kezelője */}
         <GroupManager
           groups={groups}
@@ -486,15 +497,15 @@ function App() {
         )}
 
         {/* Hiba uzenet */}
-        {error && (
+        {!loading && itemsError && (
           <div className="bg-rose-950/40 border border-rose-900/50 text-rose-300 p-5 rounded-xl text-center max-w-lg mx-auto my-10">
             <p className="font-semibold mb-1">Hiba történt</p>
-            <p className="text-xs text-rose-400">{error}</p>
+            <p className="text-xs text-rose-400">{itemsError}</p>
           </div>
         )}
 
         {/* Ures talalat */}
-        {!loading && !error && data && data.items.length === 0 && (
+        {!loading && !itemsError && data && data.items.length === 0 && (
           <div className="text-center py-20 bg-[#121f17]/40 border border-emerald-900/30 rounded-2xl">
             <p className="text-stone-300 font-medium">
               Nincs a szűrésnek megfelelő találat az adatbázisban.
@@ -506,7 +517,7 @@ function App() {
         )}
 
         {/*Hirdetes kartyak racsa es a lapozo */}
-        {!loading && !error && data && data.items.length > 0 && (
+        {!loading && !itemsError && data && data.items.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {data.items.map((item: Item) => (
