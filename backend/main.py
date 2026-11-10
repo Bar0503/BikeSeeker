@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
-from auth import create_access_token, get_current_user, get_password_hash, verify_password
+from auth import create_access_token, get_current_user, verify_password
 from database import Base, SessionLocal, engine, get_db
 from models import Group, Item, User, group_items
 from schemas import (

@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 import sys
 from typing import Final
-import bcrypt
 from sqlalchemy.orm import Session
 
 # Mappak rogzitese a keresesi utvonalhoz
@@ -11,13 +10,9 @@ ROOT_DIR: Final[Path] = CURRENT_DIR.parent
 if str(CURRENT_DIR) not in sys.path:
     sys.path.insert(0, str(CURRENT_DIR))
 
+from auth import get_password_hash
 from database import Base, SessionLocal, engine
 from models import Group, Item, User
-
-# Jelszo hashelese bcrypt algoritmus segitsegevel
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 # Kerekpar kategoria meghatarozasa a hirdetes cime alapjan
 def detect_bike_category(title: str) -> str:
@@ -107,7 +102,7 @@ def seed_database(db_session: Session | None = None) -> None:
             )
             admin_user = User(
                 username="admin",
-                password_hash=hash_password("admin"),
+                password_hash=get_password_hash("admin"),
                 scrape_preferences=default_prefs,
             )
             db.add(admin_user)
