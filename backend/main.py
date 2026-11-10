@@ -42,6 +42,7 @@ if str(BASE_DIR) not in sys.path:
 from scraper.scraper import BikeRecord, scrape_catalog, sync_bikes
 
 # Konfiguracios konstansok es fajl eleresi utak
+DUPLICATE_URL_MESSAGE: Final[str] = "Ezzel az URL-lel már létezik tétel az adatbázisban."
 DEFAULT_PAGE_SIZE: Final[int] = 12
 MAX_PAGE_SIZE: Final[int] = 100
 ALLOWED_ORIGINS: Final[list[str]] = os.getenv("CORS_ORIGINS", "*").split(",")
@@ -192,6 +193,12 @@ def parse_user_preferences(prefs_json: str | None) -> ScrapePreferencesSchema:
     except (json.JSONDecodeError, TypeError):
         return ScrapePreferencesSchema()
 
+# Reszleges frissites: csak a kliens altal tenylegesen elkuldott mezok irodnak felul
+def apply_partial_update(entity: Item | Group, payload: BaseModel) -> None:
+    for field_name, value in payload.model_dump(exclude_unset=True).items():
+        # Ures szoveg a nullable mezokben hianyzo erteket jelent
+        setattr(entity, field_name, None if value == "" else value)
+
 # Bejelentkezes ellenorzese es JWT Bearer token kiallitasa
 @app.post("/api/auth/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, object]:
@@ -321,10 +328,7 @@ def update_group(
     )
     if not group:
         raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
-    if payload.name is not None:
-        group.name = payload.name.strip()
-    if payload.description is not None:
-        group.description = payload.description.strip() if payload.description else None
+    apply_partial_update(group, payload)
     db.commit()
     db.refresh(group)
     return {
@@ -542,7 +546,7 @@ def create_item(
 ) -> dict[str, object]:
     existing = db.query(Item).filter(Item.url == payload.url.strip()).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Ezzel az URL-lel már létezik tétel az adatbázisban.")
+        raise HTTPException(status_code=400, detail=DUPLICATE_URL_MESSAGE)
 
     new_item = Item(
         title=payload.title.strip(),
@@ -598,23 +602,13 @@ def update_item(
     if not item:
         raise HTTPException(status_code=404, detail="A hirdetés nem található.")
 
-    if payload.title is not None:
-        item.title = payload.title.strip()
-    if payload.price is not None:
-        item.price = payload.price
-    if payload.location is not None:
-        item.location = payload.location.strip() if payload.location else None
-    if payload.url is not None:
-        item.url = payload.url.strip()
-    if payload.source is not None:
-        item.source = payload.source.strip()
-    if payload.item_type is not None:
-        item.item_type = payload.item_type.strip()
-    if payload.category is not None:
-        item.category = payload.category.strip() if payload.category else None
-    if "notes" in payload.model_fields_set:
-        item.notes = payload.notes.strip() if (payload.notes and payload.notes.strip()) else None
+    # URL utkozes ellenorzese a UNIQUE megszoritas megsertese elott
+    if payload.url is not None and payload.url != item.url:
+        url_taken = db.query(Item.id).filter(Item.url == payload.url).first()
+        if url_taken:
+            raise HTTPException(status_code=400, detail=DUPLICATE_URL_MESSAGE)
 
+    apply_partial_update(item, payload)
     db.commit()
     db.refresh(item)
     return {

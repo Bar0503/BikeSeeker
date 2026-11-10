@@ -1,5 +1,8 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
+from typing import Final
+
+NULL_NOT_ALLOWED_MESSAGE: Final[str] = "A mező értéke nem lehet null."
 
 # Felhasznaloi bejelentkezeshez szukseges adatok
 class LoginRequest(BaseModel):
@@ -40,6 +43,8 @@ class PreferencesUpdateRequest(BaseModel):
 
 # Csoport alapertelmezett adatai
 class GroupBase(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: str = Field(min_length=1, max_length=150)
     description: str | None = None
 
@@ -49,8 +54,18 @@ class GroupCreate(GroupBase):
 
 # Csoport adatainak modositasa
 class GroupUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: str | None = Field(default=None, min_length=1, max_length=150)
     description: str | None = None
+
+    # Kotelezo oszlop kifejezett null ertekkel nem torolheto
+    @field_validator("name")
+    @classmethod
+    def reject_explicit_null(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError(NULL_NOT_ALLOWED_MESSAGE)
+        return value
 
 # Csoport valaszmodell az elemek szamaval
 class GroupResponse(BaseModel):
@@ -65,6 +80,8 @@ class GroupResponse(BaseModel):
 
 # Hirdetes alapertelmezett adatai
 class ItemBase(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     title: str = Field(min_length=1, max_length=255)
     price: int | None = Field(default=None, ge=0)
     location: str | None = None
@@ -81,14 +98,24 @@ class ItemCreate(ItemBase):
 
 # Hirdetes adatainak es felhasznaloi megjegyzesenek modositasa
 class ItemUpdate(BaseModel):
-    title: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str | None = Field(default=None, min_length=1, max_length=255)
     price: int | None = Field(default=None, ge=0)
     location: str | None = None
-    url: str | None = None
-    source: str | None = None
-    item_type: str | None = None
+    url: str | None = Field(default=None, min_length=1, max_length=500)
+    source: str | None = Field(default=None, min_length=1, max_length=100)
+    item_type: str | None = Field(default=None, min_length=1, max_length=50)
     category: str | None = None
     notes: str | None = None
+
+    # Kotelezo oszlopok kifejezett null ertekkel nem torolhetok
+    @field_validator("title", "url", "source", "item_type")
+    @classmethod
+    def reject_explicit_null(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError(NULL_NOT_ALLOWED_MESSAGE)
+        return value
 
 # Hirdetes valaszmodell a hozza kapcsolt csoportok azonositoival
 class ItemResponse(BaseModel):
