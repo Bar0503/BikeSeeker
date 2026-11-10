@@ -214,7 +214,7 @@ export async function deleteItem(id: number): Promise<void> {
   }
 }
 
-// Csoportok listazasa a bennuk levo elemek szamaval es mezok szinkronizalasa
+// Csoportok listazasa a bennuk levo elemek szamaval
 export async function fetchGroups(signal?: AbortSignal): Promise<readonly Group[]> {
   const response = await authFetch(`${API_BASE_URL}/groups`, { signal });
   if (!response.ok) {
@@ -225,12 +225,7 @@ export async function fetchGroups(signal?: AbortSignal): Promise<readonly Group[
     throw new Error(errorMessage);
   }
 
-  // Mezonev elteres feloldasa a szerver es a kliens kozott
-  const rawData = (await response.json()) as readonly (Group & { readonly items_count?: number })[];
-  return rawData.map((g) => ({
-    ...g,
-    item_count: g.item_count ?? g.items_count ?? 0,
-  }));
+  return (await response.json()) as readonly Group[];
 }
 
 // Uj csoport letrehozasa

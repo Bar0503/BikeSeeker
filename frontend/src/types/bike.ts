@@ -75,8 +75,7 @@ export interface Group {
   readonly name: string;
   readonly description: string | null;
   readonly created_at: string;
-  readonly item_count?: number;
-  readonly items_count?: number;
+  readonly item_count: number;
 }
 
 export interface GroupCreate {

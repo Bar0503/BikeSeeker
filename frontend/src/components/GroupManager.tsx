@@ -192,7 +192,7 @@ export function GroupManager({
                   isSelected ? "bg-stone-950 text-emerald-300" : "bg-emerald-950 text-emerald-400"
                 }`}
               >
-                {group.item_count ?? group.items_count ?? 0}
+                {group.item_count}
               </span>
             </button>
           );

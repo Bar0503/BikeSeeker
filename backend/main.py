@@ -154,7 +154,6 @@ def get_groups(
             "description": g.description,
             "created_at": g.created_at,
             "item_count": len(g.items),
-            "items_count": len(g.items),
         }
         for g in groups
     ]
@@ -178,7 +177,6 @@ def create_group(
         "name": new_group.name,
         "description": new_group.description,
         "created_at": new_group.created_at,
-        "items_count": 0,
         "item_count": 0,
     }
 
@@ -202,7 +200,6 @@ def get_group(
         "name": group.name,
         "description": group.description,
         "created_at": group.created_at,
-        "items_count": len(group.items),
         "item_count": len(group.items),
     }
 
@@ -230,7 +227,6 @@ def update_group(
         "name": group.name,
         "description": group.description,
         "created_at": group.created_at,
-        "items_count": len(group.items),
         "item_count": len(group.items),
     }
 
@@ -275,7 +271,6 @@ def add_item_to_group(
         "name": group.name,
         "description": group.description,
         "created_at": group.created_at,
-        "items_count": len(group.items),
         "item_count": len(group.items),
     }
 

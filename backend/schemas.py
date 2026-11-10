@@ -79,7 +79,6 @@ class GroupResponse(BaseModel):
     name: str
     description: str | None = None
     created_at: datetime
-    items_count: int = 0
     item_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
