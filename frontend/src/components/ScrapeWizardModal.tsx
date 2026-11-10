@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   BIKE_CATEGORIES,
   PART_CATEGORIES,
@@ -11,7 +11,6 @@ import {
 
 // Modalis ablak bemeneti parameterei
 interface ScrapeWizardModalProps {
-  readonly isOpen: boolean;
   readonly initialConfig?: ScrapeWizardConfig | null;
   readonly onClose: () => void;
   readonly onSaveConfig: (
@@ -54,7 +53,6 @@ const DEFAULT_WIZARD_CONFIG: ScrapeWizardConfig = {
 
 // Tobblepcsos scrape varazslo modalis komponens
 export function ScrapeWizardModal({
-  isOpen,
   initialConfig,
   onClose,
   onSaveConfig,
@@ -75,24 +73,6 @@ export function ScrapeWizardModal({
   const [saveAsDefault, setSaveAsDefault] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-
-  // Modalis megnyitasakor szinkronizaljuk az allapotot a mentett preferenciakkal
-  useEffect(() => {
-    if (isOpen) {
-      setCurrentStep(1);
-      setValidationError(null);
-      setSubmitting(false);
-      const baseConfig = initialConfig ?? DEFAULT_WIZARD_CONFIG;
-      setItemTypes([...baseConfig.item_types]);
-      setBikeCategories([...baseConfig.bike_categories]);
-      setPartCategories([...baseConfig.part_categories]);
-      setSources([...baseConfig.sources]);
-    }
-  }, [isOpen, initialConfig]);
-
-  if (!isOpen) {
-    return null;
-  }
 
   // Tipus kijelolesenek valtasa
   const handleToggleItemType = (type: ItemType): void => {

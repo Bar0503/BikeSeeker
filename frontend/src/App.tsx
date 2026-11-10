@@ -535,25 +535,26 @@ function App() {
         )}
       </div>
 
-      {/* Scrape Varazslo modalis ablak */}
-      <ScrapeWizardModal
-        isOpen={isWizardOpen}
-        initialConfig={sessionScrapeConfig ?? currentUser?.scrape_preferences}
-        onClose={() => setIsWizardOpen(false)}
-        onSaveConfig={handleSaveWizardConfig}
-      />
+      {/* Feltetelesen mountolt modalok: minden megnyitas friss urlapallapottal indul */}
+      {isWizardOpen && (
+        <ScrapeWizardModal
+          initialConfig={sessionScrapeConfig ?? currentUser?.scrape_preferences}
+          onClose={() => setIsWizardOpen(false)}
+          onSaveConfig={handleSaveWizardConfig}
+        />
+      )}
 
-      {/* Tetel letrehozasa es szerkesztese modalis ablak */}
-      <ItemEditModal
-        isOpen={isItemModalOpen}
-        item={editingItem}
-        groups={groups}
-        onClose={() => {
-          setIsItemModalOpen(false);
-          setEditingItem(null);
-        }}
-        onSave={handleSaveItem}
-      />
+      {isItemModalOpen && (
+        <ItemEditModal
+          item={editingItem}
+          groups={groups}
+          onClose={() => {
+            setIsItemModalOpen(false);
+            setEditingItem(null);
+          }}
+          onSave={handleSaveItem}
+        />
+      )}
     </div>
   );
 }

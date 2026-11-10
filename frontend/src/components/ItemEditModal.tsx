@@ -1,4 +1,4 @@
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import {
   BIKE_CATEGORIES,
   PART_CATEGORIES,
@@ -14,7 +14,6 @@ import {
 
 // Uj tetel modalis ablak bemeneti parameterei
 interface ItemEditModalProps {
-  readonly isOpen: boolean;
   readonly item: Item | null;
   readonly groups: readonly Group[];
   readonly onClose: () => void;
@@ -25,61 +24,31 @@ interface ItemEditModalProps {
 }
 
 export function ItemEditModal({
-  isOpen,
   item,
   groups,
   onClose,
   onSave,
 }: ItemEditModalProps) {
-  // Urlap mezok allapotai
-  const [title, setTitle] = useState<string>("");
-  const [price, setPrice] = useState<string>("");
-  const [location, setLocation] = useState<string>("");
-  const [url, setUrl] = useState<string>("");
-  const [source, setSource] = useState<ScrapeSource>("bringakereso");
-  const [itemType, setItemType] = useState<ItemType>("bike");
-  const [category, setCategory] = useState<ItemCategory>("MTB");
-  const [notes, setNotes] = useState<string>("");
-  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+  // Urlap mezok kezdoerteke a szerkesztett tetelbol vagy ures uj tetelbol
+  const [title, setTitle] = useState<string>(item?.title ?? "");
+  const [price, setPrice] = useState<string>(
+    item && item.price !== null ? item.price.toString() : ""
+  );
+  const [location, setLocation] = useState<string>(item?.location ?? "");
+  const [url, setUrl] = useState<string>(item?.url ?? "");
+  const [source, setSource] = useState<ScrapeSource>(
+    (item?.source as ScrapeSource | undefined) ?? "bringakereso"
+  );
+  const [itemType, setItemType] = useState<ItemType>(item?.item_type ?? "bike");
+  const [category, setCategory] = useState<ItemCategory>(item?.category ?? "MTB");
+  const [notes, setNotes] = useState<string>(item?.notes ?? "");
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>(
+    item?.group_ids ? [...item.group_ids] : []
+  );
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isEdit = item !== null;
-
-  // Mezok szinkronizalasa megnyitaskor
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    setErrorMessage(null);
-    setIsSubmitting(false);
-
-    if (item) {
-      setTitle(item.title);
-      setPrice(item.price !== null ? item.price.toString() : "");
-      setLocation(item.location ?? "");
-      setUrl(item.url);
-      setSource((item.source as ScrapeSource) || "bringakereso");
-      setItemType(item.item_type);
-      setCategory(item.category);
-      setNotes(item.notes ?? "");
-      setSelectedGroupIds(item.group_ids ? [...item.group_ids] : []);
-    } else {
-      setTitle("");
-      setPrice("");
-      setLocation("");
-      setUrl("");
-      setSource("bringakereso");
-      setItemType("bike");
-      setCategory("MTB");
-      setNotes("");
-      setSelectedGroupIds([]);
-    }
-  }, [isOpen, item]);
-
-  if (!isOpen) {
-    return null;
-  }
 
   // Fotipus valtasakor az alapertelmezett kategoria igazitasa
   const handleItemTypeChange = (newType: ItemType): void => {
