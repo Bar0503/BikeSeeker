@@ -101,6 +101,11 @@ function App() {
       setLoading(true);
       fetchItems(currentFilters, signal)
         .then((res) => {
+          // Torles utan megszunt oldal helyett az utolso letezo oldalra lepunk
+          if (res.page > res.total_pages && res.total > 0) {
+            setFilters((prev) => ({ ...prev, page: res.total_pages }));
+            return;
+          }
           setData(res);
           setError(null);
         })
