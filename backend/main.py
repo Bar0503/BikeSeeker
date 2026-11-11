@@ -61,11 +61,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware beallitasa a frontend kommunikaciohoz
+# CORS middleware: a token fejlecben utazik, ezert suti alapu hitelesites nem kell
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
