@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Table
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # Backend mappa eleresi utjanak rogzitese az egyseges modulimportokhoz
 BACKEND_DIR = str(Path(__file__).resolve().parent)
@@ -11,49 +11,53 @@ if BACKEND_DIR not in sys.path:
 
 from database import Base
 
+# Letrehozasi idobelyeg alapertelmezett erteke
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
 # Kapcsolotabla a csoportok es hirdetesek kapcsolatanak tarolasara
 group_items = Table(
     "group_items",
     Base.metadata,
     Column("group_id", Integer, ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True),
     Column("item_id", Integer, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True),
-    Column("added_at", DateTime, default=lambda: datetime.now(timezone.utc), nullable=False),
+    Column("added_at", DateTime, default=utc_now, nullable=False),
 )
 
 # Felhasznalo entitas az autentikaciohoz es mentett beallitasokhoz
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(100), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
-    scrape_preferences = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    scrape_preferences: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 # Csoport entitas hirdetesek egyedi gyujtemenyeinek kezelesehez
 class Group(Base):
     __tablename__ = "groups"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(150), nullable=False)
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
-    items = relationship("Item", secondary=group_items, back_populates="groups")
+    items: Mapped[list["Item"]] = relationship(secondary=group_items, back_populates="groups")
 
 # Hirdetes vagy alkatresz entitas szureshez es gyujtemenyekhez
 class Item(Base):
     __tablename__ = "items"
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255), nullable=False)
-    price = Column(Integer, nullable=True, index=True)
-    location = Column(String(255), nullable=True)
-    url = Column(String(500), unique=True, nullable=False, index=True)
-    source = Column(String(100), nullable=False, index=True)
-    item_type = Column(String(50), nullable=False, index=True)
-    category = Column(String(50), nullable=True, index=True)
-    notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    price: Mapped[int | None] = mapped_column(Integer, index=True)
+    location: Mapped[str | None] = mapped_column(String(255))
+    url: Mapped[str] = mapped_column(String(500), unique=True, index=True)
+    source: Mapped[str] = mapped_column(String(100), index=True)
+    item_type: Mapped[str] = mapped_column(String(50), index=True)
+    category: Mapped[str | None] = mapped_column(String(50), index=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, index=True)
 
-    groups = relationship("Group", secondary=group_items, back_populates="items")
+    groups: Mapped[list[Group]] = relationship(secondary=group_items, back_populates="items")

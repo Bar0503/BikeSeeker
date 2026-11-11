@@ -3,7 +3,7 @@ import sqlite3
 from typing import Final, Generator
 import unicodedata
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from sqlalchemy.pool import ConnectionPoolEntry
 
 # Adatbazis kapcsolat konfiguracioja kornyezeti valtozo alapjan sqlite fallbackkel
@@ -20,7 +20,9 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+# Tipusos ORM alaposztaly az SQLAlchemy 2 Mapped modellekhez
+class Base(DeclarativeBase):
+    pass
 
 # Kisbetusites es ekezetek eltavolitasa, hogy a 'GYŐR', 'győr' es 'gyor' egyezzen
 def normalize_search_text(text: str | None) -> str | None:
