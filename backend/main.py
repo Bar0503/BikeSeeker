@@ -51,6 +51,8 @@ from scraper.scraper import scrape_catalog
 
 # Konfiguracios konstansok es fajl eleresi utak
 DUPLICATE_URL_MESSAGE: Final[str] = "Ezzel az URL-lel már létezik tétel az adatbázisban."
+GROUP_NOT_FOUND_MESSAGE: Final[str] = "A megadott csoport nem található."
+ITEM_NOT_FOUND_MESSAGE: Final[str] = "A hirdetés nem található."
 DEFAULT_PAGE_SIZE: Final[int] = 12
 MAX_PAGE_SIZE: Final[int] = 100
 ALLOWED_ORIGINS: Final[list[str]] = os.getenv("CORS_ORIGINS", "*").split(",")
@@ -105,6 +107,30 @@ def apply_partial_update(entity: Item | Group, payload: BaseModel) -> None:
 def contains_normalized(column: ColumnElement[str], term: str) -> ColumnElement[bool]:
     normalized_column = getattr(func, SEARCH_NORMALIZE_FUNCTION)(column)
     return normalized_column.like(f"%{normalize_search_text(term)}%")
+
+# Csoport lekerese a tetelekkel egyutt, hianyzo csoportnal 404-es hibaval
+def get_group_or_404(db: Session, group_id: int) -> Group:
+    group = (
+        db.query(Group)
+        .options(selectinload(Group.items))
+        .filter(Group.id == group_id)
+        .first()
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail=GROUP_NOT_FOUND_MESSAGE)
+    return group
+
+# Hirdetes lekerese a csoportjaival egyutt, hianyzo hirdetesnel 404-es hibaval
+def get_item_or_404(db: Session, item_id: int) -> Item:
+    item = (
+        db.query(Item)
+        .options(selectinload(Item.groups))
+        .filter(Item.id == item_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail=ITEM_NOT_FOUND_MESSAGE)
+    return item
 
 # Csoport valasz felepitese a megadott elemszammal
 def build_group_response(group: Group, item_count: int) -> dict[str, object]:
@@ -212,14 +238,7 @@ def get_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
-    group = (
-        db.query(Group)
-        .options(selectinload(Group.items))
-        .filter(Group.id == group_id)
-        .first()
-    )
-    if not group:
-        raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
+    group = get_group_or_404(db, group_id)
     return build_group_response(group, len(group.items))
 
 # Csoport adatainak modositasa
@@ -230,14 +249,7 @@ def update_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
-    group = (
-        db.query(Group)
-        .options(selectinload(Group.items))
-        .filter(Group.id == group_id)
-        .first()
-    )
-    if not group:
-        raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
+    group = get_group_or_404(db, group_id)
     apply_partial_update(group, payload)
     db.commit()
     db.refresh(group)
@@ -250,9 +262,7 @@ def delete_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    group = db.query(Group).filter(Group.id == group_id).first()
-    if not group:
-        raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
+    group = get_group_or_404(db, group_id)
     db.delete(group)
     db.commit()
 
@@ -264,17 +274,8 @@ def add_item_to_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
-    group = (
-        db.query(Group)
-        .options(selectinload(Group.items))
-        .filter(Group.id == group_id)
-        .first()
-    )
-    if not group:
-        raise HTTPException(status_code=404, detail="A csoport nem található.")
-    item = db.query(Item).filter(Item.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="A hirdetés nem található.")
+    group = get_group_or_404(db, group_id)
+    item = get_item_or_404(db, item_id)
     if item not in group.items:
         group.items.append(item)
         db.commit()
@@ -289,12 +290,8 @@ def remove_item_from_group(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    group = db.query(Group).filter(Group.id == group_id).first()
-    if not group:
-        raise HTTPException(status_code=404, detail="A csoport nem található.")
-    item = db.query(Item).filter(Item.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="A hirdetés nem található.")
+    group = get_group_or_404(db, group_id)
+    item = get_item_or_404(db, item_id)
     if item in group.items:
         group.items.remove(item)
         db.commit()
@@ -417,14 +414,7 @@ def update_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
-    item = (
-        db.query(Item)
-        .options(selectinload(Item.groups))
-        .filter(Item.id == item_id)
-        .first()
-    )
-    if not item:
-        raise HTTPException(status_code=404, detail="A hirdetés nem található.")
+    item = get_item_or_404(db, item_id)
 
     # URL utkozes ellenorzese a UNIQUE megszoritas megsertese elott
     if payload.url is not None and payload.url != item.url:
@@ -444,9 +434,7 @@ def delete_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    item = db.query(Item).filter(Item.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="A hirdetés nem található.")
+    item = get_item_or_404(db, item_id)
     db.delete(item)
     db.commit()
 
