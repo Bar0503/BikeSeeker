@@ -4,28 +4,17 @@ import sys
 from typing import Final
 from sqlalchemy.orm import Session
 
-# Mappak rogzitese a keresesi utvonalhoz
+# Mappak rogzitese a keresesi utvonalhoz, a projekt gyokere a scraper modul miatt kell
 CURRENT_DIR: Final[Path] = Path(__file__).resolve().parent
 ROOT_DIR: Final[Path] = CURRENT_DIR.parent
-if str(CURRENT_DIR) not in sys.path:
-    sys.path.insert(0, str(CURRENT_DIR))
+for import_dir in (CURRENT_DIR, ROOT_DIR):
+    if str(import_dir) not in sys.path:
+        sys.path.insert(0, str(import_dir))
 
 from auth import get_password_hash
 from database import Base, SessionLocal, engine
 from models import Group, Item, User
-
-# Kerekpar kategoria meghatarozasa a hirdetes cime alapjan
-def detect_bike_category(title: str) -> str:
-    lower_title = title.lower()
-    if "trail" in lower_title:
-        return "Trail"
-    if "e-bike" in lower_title or "ebike" in lower_title:
-        return "E-Bike"
-    if "enduro" in lower_title:
-        return "Enduro"
-    if "dh" in lower_title or "downhill" in lower_title:
-        return "DH"
-    return "MTB"
+from scraper.scraper import detect_bike_category
 
 # Alapertelmezett minta alkatreszek listaja mindket tipus reprezentalasahoz
 SAMPLE_PARTS: Final[list[dict[str, str | int | None]]] = [
