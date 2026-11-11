@@ -454,11 +454,18 @@ def trigger_catalog_scrape(
     new_added = 0
     updated = 0
 
+    # Mar letezo hirdetesek betoltese egyetlen lekerdezessel URL szerint
+    scraped_urls = [str(raw_item.get("url") or "") for raw_item in scraped_items]
+    existing_by_url: dict[str, Item] = {
+        str(item.url): item
+        for item in db.query(Item).filter(Item.url.in_(scraped_urls)).all()
+    }
+
     for raw_item in scraped_items:
         url_str = str(raw_item.get("url") or "")
         if not url_str:
             continue
-        existing_item = db.query(Item).filter(Item.url == url_str).first()
+        existing_item = existing_by_url.get(url_str)
         if existing_item:
             changed = False
             if existing_item.price != raw_item.get("price"):
@@ -484,6 +491,7 @@ def trigger_catalog_scrape(
                 notes=None,
             )
             db.add(new_item_entity)
+            existing_by_url[url_str] = new_item_entity
             new_added += 1
 
     db.commit()
