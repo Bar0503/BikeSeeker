@@ -132,61 +132,57 @@ def get_item_or_404(db: Session, item_id: int) -> Item:
         raise HTTPException(status_code=404, detail=ITEM_NOT_FOUND_MESSAGE)
     return item
 
+# Felhasznaloi profil valasz felepitese a dekodolt beallitasokkal
+def build_user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        scrape_preferences=parse_user_preferences(user.scrape_preferences),
+    )
+
 # Csoport valasz felepitese a megadott elemszammal
-def build_group_response(group: Group, item_count: int) -> dict[str, object]:
-    return {
-        "id": group.id,
-        "name": group.name,
-        "description": group.description,
-        "created_at": group.created_at,
-        "item_count": item_count,
-    }
+def build_group_response(group: Group, item_count: int) -> GroupResponse:
+    return GroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        created_at=group.created_at,
+        item_count=item_count,
+    )
 
 # Hirdetes valasz felepitese a kapcsolt csoportok azonositoival
-def build_item_response(item: Item) -> dict[str, object]:
-    return {
-        "id": item.id,
-        "title": item.title,
-        "price": item.price,
-        "location": item.location,
-        "url": item.url,
-        "source": item.source,
-        "item_type": item.item_type,
-        "category": item.category,
-        "notes": item.notes,
-        "created_at": item.created_at,
-        "group_ids": [group.id for group in item.groups],
-    }
+def build_item_response(item: Item) -> ItemResponse:
+    return ItemResponse(
+        id=item.id,
+        title=item.title,
+        price=item.price,
+        location=item.location,
+        url=item.url,
+        source=item.source,
+        item_type=item.item_type,
+        category=item.category,
+        notes=item.notes,
+        created_at=item.created_at,
+        group_ids=[group.id for group in item.groups],
+    )
 
 # Bejelentkezes ellenorzese es JWT Bearer token kiallitasa
 @app.post("/api/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, object]:
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.query(User).filter(User.username == payload.username.strip()).first()
-    if not user or not verify_password(payload.password, str(user.password_hash)):
+    if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Hibás felhasználónév vagy jelszó.",
         )
 
-    token = create_access_token(data={"sub": str(user.username)})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "scrape_preferences": parse_user_preferences(user.scrape_preferences),
-        },
-    }
+    token = create_access_token(data={"sub": user.username})
+    return TokenResponse(access_token=token, user=build_user_response(user))
 
 # Aktualisan bejelentkezett felhasznalo adatainak lekerese
 @app.get("/api/auth/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)) -> dict[str, object]:
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "scrape_preferences": parse_user_preferences(current_user.scrape_preferences),
-    }
+def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
+    return build_user_response(current_user)
 
 # Scrape varazslo preferenciainak mentese az adatbazisba
 @app.put("/api/auth/preferences", response_model=ScrapePreferencesSchema)
@@ -205,7 +201,7 @@ def update_preferences(
 def get_groups(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[dict[str, object]]:
+) -> list[GroupResponse]:
     rows = (
         db.query(Group, func.count(group_items.c.item_id))
         .outerjoin(group_items, group_items.c.group_id == Group.id)
@@ -221,7 +217,7 @@ def create_group(
     payload: GroupCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> GroupResponse:
     new_group = Group(
         name=payload.name.strip(),
         description=payload.description.strip() if payload.description else None,
@@ -237,7 +233,7 @@ def get_group(
     group_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> GroupResponse:
     group = get_group_or_404(db, group_id)
     return build_group_response(group, len(group.items))
 
@@ -248,7 +244,7 @@ def update_group(
     payload: GroupUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> GroupResponse:
     group = get_group_or_404(db, group_id)
     apply_partial_update(group, payload)
     db.commit()
@@ -273,7 +269,7 @@ def add_item_to_group(
     item_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> GroupResponse:
     group = get_group_or_404(db, group_id)
     item = get_item_or_404(db, item_id)
     if item not in group.items:
@@ -318,7 +314,7 @@ def get_items(
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE, description="Oldalméret"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> ItemListResponse:
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(status_code=400, detail="A minimum ár nem lehet nagyobb a maximum árnál.")
 
@@ -362,13 +358,13 @@ def get_items(
     total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
     items = sql_query.offset((page - 1) * page_size).limit(page_size).all()
 
-    return {
-        "total": total_count,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": total_pages,
-        "items": [build_item_response(item) for item in items],
-    }
+    return ItemListResponse(
+        total=total_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        items=[build_item_response(item) for item in items],
+    )
 
 # Uj hirdetes vagy alkatresz manualis letrehozasa tobb csoport tamogatassal
 @app.post("/api/items", response_model=ItemResponse, status_code=status.HTTP_201_CREATED)
@@ -376,7 +372,7 @@ def create_item(
     payload: ItemCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> ItemResponse:
     existing = db.query(Item).filter(Item.url == payload.url.strip()).first()
     if existing:
         raise HTTPException(status_code=400, detail=DUPLICATE_URL_MESSAGE)
@@ -413,7 +409,7 @@ def update_item(
     payload: ItemUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> ItemResponse:
     item = get_item_or_404(db, item_id)
 
     # URL utkozes ellenorzese a UNIQUE megszoritas megsertese elott
@@ -444,7 +440,7 @@ def trigger_catalog_scrape(
     payload: ScrapeTriggerRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, object]:
+) -> ScrapeTriggerResponse:
     scraped_items, pages_scraped = scrape_catalog(
         item_types=payload.item_types,
         bike_categories=payload.bike_categories,
@@ -459,7 +455,7 @@ def trigger_catalog_scrape(
     # Mar letezo hirdetesek betoltese egyetlen lekerdezessel URL szerint
     scraped_urls = [str(raw_item.get("url") or "") for raw_item in scraped_items]
     existing_by_url: dict[str, Item] = {
-        str(item.url): item
+        item.url: item
         for item in db.query(Item).filter(Item.url.in_(scraped_urls)).all()
     }
 
@@ -499,10 +495,10 @@ def trigger_catalog_scrape(
     db.commit()
     total_in_db = db.query(Item).count()
 
-    return {
-        "mode": payload.mode.value,
-        "pages_scraped": pages_scraped,
-        "new_added": new_added,
-        "updated": updated,
-        "total_items": total_in_db,
-    }
+    return ScrapeTriggerResponse(
+        mode=payload.mode.value,
+        pages_scraped=pages_scraped,
+        new_added=new_added,
+        updated=updated,
+        total_items=total_in_db,
+    )
