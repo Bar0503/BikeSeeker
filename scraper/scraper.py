@@ -31,6 +31,8 @@ PRICE_SELECTOR: Final[str] = "[class*='price'], [class*='amount']"
 # Halozati es lapozasi konstansok
 REQUEST_TIMEOUT_SEC: Final[int] = 10
 DEFAULT_DELAY_SEC: Final[float] = 0.8
+LATEST_MODE_MAX_PAGES: Final[int] = 1
+ALL_MODE_MAX_PAGES: Final[int] = 3
 
 # Elore leforditott reguláris kifejezesek a gyorsabb szovegfeldolgozashoz
 PRICE_WITH_CURRENCY_REGEX: Final[re.Pattern[str]] = re.compile(
@@ -179,6 +181,42 @@ DEMO_ITEMS_FALLBACK: Final[list[ScrapedItemRecord]] = [
     {"title": "Shimano XTR M9120 tárcsafék szett", "price": 165000, "location": "Debrecen", "url": "https://bikemag.hu/apro/demo-shimano-xtr-fek/", "source": "bikemag", "item_type": "part", "category": "Fék"},
 ]
 
+# Egy hirdetestipus lapjainak vegigjarasa kategoriaszurovel
+def scrape_listing_pages(
+    url_template: str,
+    item_type: str,
+    allowed_categories: list[str],
+    max_pages: int,
+) -> tuple[list[ScrapedItemRecord], int]:
+    records: list[ScrapedItemRecord] = []
+    seen_urls: set[str] = set()
+    pages_scraped = 0
+
+    with requests.Session() as session:
+        for page in range(1, max_pages + 1):
+            if page > 1:
+                time.sleep(DEFAULT_DELAY_SEC)
+            html = fetch_html(url_template.format(page=page), session=session)
+            if not html:
+                break
+
+            page_items_count = 0
+            for card in BeautifulSoup(html, "html.parser").select(CARD_SELECTOR):
+                record = parse_bike_card(card, item_type=item_type)
+                if not record or str(record["url"]) in seen_urls:
+                    continue
+                if allowed_categories and record.get("category") not in allowed_categories:
+                    continue
+                seen_urls.add(str(record["url"]))
+                records.append(record)
+                page_items_count += 1
+
+            pages_scraped += 1
+            if page_items_count == 0:
+                break
+
+    return records, pages_scraped
+
 # Celzott adatgyujtes a kivalasztott tipusok forrasok es kategoriak szerint
 def scrape_catalog(
     item_types: list[str],
@@ -188,62 +226,24 @@ def scrape_catalog(
     mode: str = "latest",
 ) -> tuple[list[ScrapedItemRecord], int]:
     results: list[ScrapedItemRecord] = []
-    seen_urls: set[str] = set()
     total_pages_scraped = 0
-    max_pages = 1 if mode == "latest" else 3
-    normalized_sources: set[str] = {s.strip().lower() for s in sources} if sources else {"bringakereso"}
+    max_pages = LATEST_MODE_MAX_PAGES if mode == "latest" else ALL_MODE_MAX_PAGES
+    normalized_sources: set[str] = {s.strip().lower() for s in sources} if sources else {SOURCE_NAME}
 
     # Bringakereso piacter letoltese ha szerepel az igenyelt forrasok kozott
-    if "bringakereso" in normalized_sources:
-        if "bike" in item_types:
-            with requests.Session() as session:
-                for page in range(1, max_pages + 1):
-                    if page > 1:
-                        time.sleep(DEFAULT_DELAY_SEC)
-                    url = BIKE_URL_TEMPLATE.format(page=page)
-                    html = fetch_html(url, session=session)
-                    if not html:
-                        break
-                    soup = BeautifulSoup(html, "html.parser")
-                    cards = soup.select(CARD_SELECTOR)
-                    page_items_count = 0
-                    for card in cards:
-                        record = parse_bike_card(card, item_type="bike")
-                        if not record or str(record["url"]) in seen_urls:
-                            continue
-                        if bike_categories and record.get("category") not in bike_categories:
-                            continue
-                        seen_urls.add(str(record["url"]))
-                        results.append(record)
-                        page_items_count += 1
-                    total_pages_scraped += 1
-                    if page_items_count == 0:
-                        break
+    if SOURCE_NAME in normalized_sources:
+        listing_targets = (
+            ("bike", BIKE_URL_TEMPLATE, bike_categories),
+            ("part", PART_URL_TEMPLATE, part_categories),
+        )
+        for item_type, url_template, categories in listing_targets:
+            if item_type not in item_types:
+                continue
+            records, pages_scraped = scrape_listing_pages(url_template, item_type, categories, max_pages)
+            results.extend(records)
+            total_pages_scraped += pages_scraped
 
-        if "part" in item_types:
-            with requests.Session() as session:
-                for page in range(1, max_pages + 1):
-                    if page > 1:
-                        time.sleep(DEFAULT_DELAY_SEC)
-                    url = PART_URL_TEMPLATE.format(page=page)
-                    html = fetch_html(url, session=session)
-                    if not html:
-                        break
-                    soup = BeautifulSoup(html, "html.parser")
-                    cards = soup.select(CARD_SELECTOR)
-                    page_items_count = 0
-                    for card in cards:
-                        record = parse_bike_card(card, item_type="part")
-                        if not record or str(record["url"]) in seen_urls:
-                            continue
-                        if part_categories and record.get("category") not in part_categories:
-                            continue
-                        seen_urls.add(str(record["url"]))
-                        results.append(record)
-                        page_items_count += 1
-                    total_pages_scraped += 1
-                    if page_items_count == 0:
-                        break
+    seen_urls: set[str] = {str(record["url"]) for record in results}
 
     # Tartalek bemutato adatok illesztese a forras es kategoria szurokhoz
     for demo_item in DEMO_ITEMS_FALLBACK:
