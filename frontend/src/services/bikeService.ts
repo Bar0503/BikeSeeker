@@ -18,6 +18,10 @@ import type {
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api";
 const TOKEN_STORAGE_KEY = "bikeseeker_jwt_token";
 
+// Lejart munkamenet jelzese az alkalmazas fele bongeszo esemennyel
+export const SESSION_EXPIRED_EVENT = "bikeseeker:session-expired";
+export const SESSION_EXPIRED_MESSAGE = "A munkamenet lejárt. Kérlek, jelentkezz be újra.";
+
 // JWT token lekerdezese a bongeszo helyi adattarabol
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -62,10 +66,11 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
 
   const response = await fetch(url, { ...init, headers });
 
-  // Lejart vagy ervenytelen token eseten toroljuk a helyi munkamenetet
+  // Lejart vagy ervenytelen token eseten toroljuk a helyi munkamenetet es jelzunk az alkalmazasnak
   if (response.status === 401) {
     clearStoredToken();
-    throw new Error("A munkamenet lejárt. Kérlek, jelentkezz be újra.");
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    throw new Error(SESSION_EXPIRED_MESSAGE);
   }
 
   return response;

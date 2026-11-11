@@ -4,9 +4,10 @@ import { login } from "../services/bikeService";
 
 interface LoginScreenProps {
   readonly onLoginSuccess: (user: User) => void;
+  readonly notice?: string | null;
 }
 
-export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+export function LoginScreen({ onLoginSuccess, notice }: LoginScreenProps) {
   const [username, setUsername] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -65,6 +66,13 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         {errorMessage && (
           <div className="mb-4 p-3 rounded-lg bg-rose-950/50 border border-rose-900/60 text-rose-300 text-xs">
             {errorMessage}
+          </div>
+        )}
+
+        {/* Tajekoztato uzenet, peldaul lejart munkamenet utan */}
+        {notice && !errorMessage && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs">
+            {notice}
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import type {
   Group,
   GroupCreate,
@@ -25,6 +25,8 @@ import {
   logout,
   removeItemFromGroup,
   savePreferences,
+  SESSION_EXPIRED_EVENT,
+  SESSION_EXPIRED_MESSAGE,
   triggerWizardScrape,
   updateGroup,
   updateItem,
@@ -70,6 +72,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuth, setIsAuth] = useState<boolean>(isAuthenticated());
   const [showSplash, setShowSplash] = useState<boolean>(false);
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
 
   // Adat- es szuroallapotok
   const [itemsResult, setItemsResult] = useState<ItemsResult | null>(null);
@@ -149,8 +152,13 @@ function App() {
     return () => controller.abort();
   }, [filters, isAuth, showSplash, dataVersion]);
 
-  // Sikeres bejelentkezes utan splash animacio inditasa
+  // Sikeres bejelentkezes utan splash animacio inditasa tiszta allapotbol
   const handleLoginSuccess = (user: User): void => {
+    // A lejart munkamenet kozben befutott keresek hibai ne maradjanak meg
+    setItemsResult(null);
+    setScrapeError(null);
+    setSyncMessage(null);
+    setLoginNotice(null);
     setCurrentUser(user);
     setIsAuth(true);
     setShowSplash(true);
@@ -165,6 +173,18 @@ function App() {
     setGroups([]);
     setSessionScrapeConfig(null);
   };
+
+  // Barmely API hivas 401-es valaszara visszalepes a belepesi kepernyore
+  const handleSessionExpired = useEffectEvent((): void => {
+    handleLogout();
+    setLoginNotice(SESSION_EXPIRED_MESSAGE);
+  });
+
+  useEffect(() => {
+    const listener = (): void => handleSessionExpired();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
+  }, []);
 
   // Szurok reszleges frissitese
   const handleFilterChange = (updated: Partial<ItemQueryParams>): void => {
@@ -311,7 +331,7 @@ function App() {
 
   // 1. Allapot: Belepesi kepernyo
   if (!isAuth) {
-    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} notice={loginNotice} />;
   }
 
   // 2. Allapot: Splash animacio
