@@ -200,19 +200,20 @@ def scrape_listing_pages(
             if not html:
                 break
 
-            page_items_count = 0
+            new_cards_count = 0
             for card in BeautifulSoup(html, "html.parser").select(CARD_SELECTOR):
                 record = parse_bike_card(card, item_type=item_type)
                 if not record or str(record["url"]) in seen_urls:
                     continue
+                seen_urls.add(str(record["url"]))
+                new_cards_count += 1
                 if allowed_categories and record.get("category") not in allowed_categories:
                     continue
-                seen_urls.add(str(record["url"]))
                 records.append(record)
-                page_items_count += 1
 
             pages_scraped += 1
-            if page_items_count == 0:
+            # Csak akkor allunk meg, ha az oldalon mar egyaltalan nem volt uj hirdetes
+            if new_cards_count == 0:
                 break
 
     return records, pages_scraped
