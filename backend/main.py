@@ -93,6 +93,32 @@ def apply_partial_update(entity: Item | Group, payload: BaseModel) -> None:
         # Ures szoveg a nullable mezokben hianyzo erteket jelent
         setattr(entity, field_name, None if value == "" else value)
 
+# Csoport valasz felepitese a megadott elemszammal
+def build_group_response(group: Group, item_count: int) -> dict[str, object]:
+    return {
+        "id": group.id,
+        "name": group.name,
+        "description": group.description,
+        "created_at": group.created_at,
+        "item_count": item_count,
+    }
+
+# Hirdetes valasz felepitese a kapcsolt csoportok azonositoival
+def build_item_response(item: Item) -> dict[str, object]:
+    return {
+        "id": item.id,
+        "title": item.title,
+        "price": item.price,
+        "location": item.location,
+        "url": item.url,
+        "source": item.source,
+        "item_type": item.item_type,
+        "category": item.category,
+        "notes": item.notes,
+        "created_at": item.created_at,
+        "group_ids": [group.id for group in item.groups],
+    }
+
 # Bejelentkezes ellenorzese es JWT Bearer token kiallitasa
 @app.post("/api/auth/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, object]:
@@ -147,16 +173,7 @@ def get_groups(
         .order_by(Group.created_at.desc())
         .all()
     )
-    return [
-        {
-            "id": g.id,
-            "name": g.name,
-            "description": g.description,
-            "created_at": g.created_at,
-            "item_count": len(g.items),
-        }
-        for g in groups
-    ]
+    return [build_group_response(group, len(group.items)) for group in groups]
 
 # Uj csoport letrehozasa
 @app.post("/api/groups", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
@@ -172,13 +189,7 @@ def create_group(
     db.add(new_group)
     db.commit()
     db.refresh(new_group)
-    return {
-        "id": new_group.id,
-        "name": new_group.name,
-        "description": new_group.description,
-        "created_at": new_group.created_at,
-        "item_count": 0,
-    }
+    return build_group_response(new_group, 0)
 
 # Egyetlen csoport lekerese azonosito alapjan
 @app.get("/api/groups/{group_id}", response_model=GroupResponse)
@@ -195,13 +206,7 @@ def get_group(
     )
     if not group:
         raise HTTPException(status_code=404, detail="A megadott csoport nem található.")
-    return {
-        "id": group.id,
-        "name": group.name,
-        "description": group.description,
-        "created_at": group.created_at,
-        "item_count": len(group.items),
-    }
+    return build_group_response(group, len(group.items))
 
 # Csoport adatainak modositasa
 @app.put("/api/groups/{group_id}", response_model=GroupResponse)
@@ -222,13 +227,7 @@ def update_group(
     apply_partial_update(group, payload)
     db.commit()
     db.refresh(group)
-    return {
-        "id": group.id,
-        "name": group.name,
-        "description": group.description,
-        "created_at": group.created_at,
-        "item_count": len(group.items),
-    }
+    return build_group_response(group, len(group.items))
 
 # Csoport torlese a hirdetesek megorzesével
 @app.delete("/api/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -266,13 +265,7 @@ def add_item_to_group(
         group.items.append(item)
         db.commit()
         db.refresh(group)
-    return {
-        "id": group.id,
-        "name": group.name,
-        "description": group.description,
-        "created_at": group.created_at,
-        "item_count": len(group.items),
-    }
+    return build_group_response(group, len(group.items))
 
 # Hirdetes eltavolitasa egy csoportbol
 @app.delete("/api/groups/{group_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -363,22 +356,7 @@ def get_items(
         "page": page,
         "page_size": page_size,
         "total_pages": total_pages,
-        "items": [
-            {
-                "id": it.id,
-                "title": it.title,
-                "price": it.price,
-                "location": it.location,
-                "url": it.url,
-                "source": it.source,
-                "item_type": it.item_type,
-                "category": it.category,
-                "notes": it.notes,
-                "created_at": it.created_at,
-                "group_ids": [g.id for g in it.groups],
-            }
-            for it in items
-        ],
+        "items": [build_item_response(item) for item in items],
     }
 
 # Uj hirdetes vagy alkatresz manualis letrehozasa tobb csoport tamogatassal
@@ -415,19 +393,7 @@ def create_item(
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
-    return {
-        "id": new_item.id,
-        "title": new_item.title,
-        "price": new_item.price,
-        "location": new_item.location,
-        "url": new_item.url,
-        "source": new_item.source,
-        "item_type": new_item.item_type,
-        "category": new_item.category,
-        "notes": new_item.notes,
-        "created_at": new_item.created_at,
-        "group_ids": [g.id for g in new_item.groups],
-    }
+    return build_item_response(new_item)
 
 # Hirdetes adatainak es egyedi megjegyzesenek modositasa
 @app.put("/api/items/{item_id}", response_model=ItemResponse)
@@ -455,19 +421,7 @@ def update_item(
     apply_partial_update(item, payload)
     db.commit()
     db.refresh(item)
-    return {
-        "id": item.id,
-        "title": item.title,
-        "price": item.price,
-        "location": item.location,
-        "url": item.url,
-        "source": item.source,
-        "item_type": item.item_type,
-        "category": item.category,
-        "notes": item.notes,
-        "created_at": item.created_at,
-        "group_ids": [g.id for g in item.groups],
-    }
+    return build_item_response(item)
 
 # Hirdetes vegleges torlese az adatbazisbol
 @app.delete("/api/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
