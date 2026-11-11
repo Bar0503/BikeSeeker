@@ -11,11 +11,18 @@ from typing import Final
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import ColumnElement, func
 from sqlalchemy.orm import Session, selectinload
 
 from auth import create_access_token, get_current_user, verify_password
-from database import Base, SessionLocal, engine, get_db
+from database import (
+    SEARCH_NORMALIZE_FUNCTION,
+    Base,
+    SessionLocal,
+    engine,
+    get_db,
+    normalize_search_text,
+)
 from models import Group, Item, User, group_items
 from schemas import (
     GroupCreate,
@@ -93,6 +100,11 @@ def apply_partial_update(entity: Item | Group, payload: BaseModel) -> None:
     for field_name, value in payload.model_dump(exclude_unset=True).items():
         # Ures szoveg a nullable mezokben hianyzo erteket jelent
         setattr(entity, field_name, None if value == "" else value)
+
+# Kis- es nagybetu, valamint ekezet fuggetlen reszszoveg szures egy szoveges oszlopra
+def contains_normalized(column: ColumnElement[str], term: str) -> ColumnElement[bool]:
+    normalized_column = getattr(func, SEARCH_NORMALIZE_FUNCTION)(column)
+    return normalized_column.like(f"%{normalize_search_text(term)}%")
 
 # Csoport valasz felepitese a megadott elemszammal
 def build_group_response(group: Group, item_count: int) -> dict[str, object]:
@@ -331,7 +343,7 @@ def get_items(
     if query and query.strip():
         words = query.strip().split()
         for word in words:
-            sql_query = sql_query.filter(Item.title.ilike(f"%{word}%"))
+            sql_query = sql_query.filter(contains_normalized(Item.title, word))
 
     # Ar- es helyszinszurok alkalmazasa
     if min_price is not None:
@@ -339,7 +351,7 @@ def get_items(
     if max_price is not None:
         sql_query = sql_query.filter(Item.price <= max_price)
     if location and location.strip():
-        sql_query = sql_query.filter(Item.location.ilike(f"%{location.strip()}%"))
+        sql_query = sql_query.filter(contains_normalized(Item.location, location.strip()))
 
     # Rendezes beallitasa ar szerint ugy hogy a hianyzo arak a lista vegere keruljenek
     if sort_by == SortOption.PRICE_ASC:
