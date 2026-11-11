@@ -7,12 +7,12 @@ cd "$ROOT_DIR"
 
 # Elofeltetelek ellenorzese (python3 es npm)
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "[HIBA] A python3 nem található. Kérlek, telepítsd a Python 3.10+ verziót!" >&2
+  echo "[HIBA] A python3 nem található. Kérlek, telepítsd a Python 3.11+ verziót!" >&2
   exit 1
 fi
 
 if ! command -v npm >/dev/null 2>&1; then
-  echo "[HIBA] Az npm nem található. Kérlek, telepítsd a Node.js 18+ verziót!" >&2
+  echo "[HIBA] Az npm nem található. Kérlek, telepítsd a Node.js 20.19+ verziót!" >&2
   exit 1
 fi
 
