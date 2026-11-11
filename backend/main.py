@@ -11,6 +11,7 @@ from typing import Final
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from auth import create_access_token, get_current_user, verify_password
@@ -161,19 +162,20 @@ def update_preferences(
     db.commit()
     return payload
 
-# Csoportok listazasa az elemek szamaval
+# Csoportok listazasa az elemek szamaval, a szamlalast az adatbazis vegzi
 @app.get("/api/groups", response_model=list[GroupResponse])
 def get_groups(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[dict[str, object]]:
-    groups = (
-        db.query(Group)
-        .options(selectinload(Group.items))
+    rows = (
+        db.query(Group, func.count(group_items.c.item_id))
+        .outerjoin(group_items, group_items.c.group_id == Group.id)
+        .group_by(Group.id)
         .order_by(Group.created_at.desc())
         .all()
     )
-    return [build_group_response(group, len(group.items)) for group in groups]
+    return [build_group_response(group, item_count) for group, item_count in rows]
 
 # Uj csoport letrehozasa
 @app.post("/api/groups", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
